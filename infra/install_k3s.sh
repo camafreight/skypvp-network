@@ -1,2 +1,11 @@
 #!/bin/bash
-curl -sfL https://get.k3s.io | K3S_TOKEN="K1045ddaa83bdfd4f9f64915da203ff0a2d6e3d0a4b9d59d9ddd7b9a9052390f1f1::server:ecb77f54643599f3b4bffc48ff35e371" INSTALL_K3S_EXEC="server --cluster-init --cluster-reset --cluster-reset-restore-path=/tmp/snapshot.db" sh -
+set -euo pipefail
+
+if [ -z "${K3S_TOKEN:-}" ]; then
+  echo "K3S_TOKEN is required. Copy infra/k3s-install.env.example to infra/k3s-install.env and export it." >&2
+  exit 1
+fi
+
+INSTALL_K3S_EXEC="${INSTALL_K3S_EXEC:-server --cluster-init}"
+
+curl -sfL https://get.k3s.io | K3S_TOKEN="$K3S_TOKEN" INSTALL_K3S_EXEC="$INSTALL_K3S_EXEC" sh -

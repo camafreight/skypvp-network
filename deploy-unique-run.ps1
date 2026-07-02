@@ -4,6 +4,34 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'infra/k8s/scripts/_game-mode-helpers.ps1')
 
+function Import-DeployLocalEnv {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        return
+    }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -eq '' -or $line.StartsWith('#')) { return }
+        $eq = $line.IndexOf('=')
+        if ($eq -lt 1) { return }
+        $name = $line.Substring(0, $eq).Trim()
+        $value = $line.Substring($eq + 1).Trim().Trim('"').Trim("'")
+        if ($name) { Set-Item -Path "Env:$name" -Value $value }
+    }
+}
+
+Import-DeployLocalEnv (Join-Path $PSScriptRoot 'infra/deploy.local.env')
+
+$nodePassword = $env:SKYPVP_NODE_SSH_PASSWORD
+$node1Target = $env:SKYPVP_NODE1_SSH_TARGET
+$node2Target = $env:SKYPVP_NODE2_SSH_TARGET
+if ([string]::IsNullOrWhiteSpace($nodePassword)) {
+    throw "SKYPVP_NODE_SSH_PASSWORD is not set. Copy infra/deploy.local.env.example to infra/deploy.local.env."
+}
+if ([string]::IsNullOrWhiteSpace($node1Target) -or [string]::IsNullOrWhiteSpace($node2Target)) {
+    throw "SKYPVP_NODE1_SSH_TARGET and SKYPVP_NODE2_SSH_TARGET must be set in infra/deploy.local.env."
+}
+
 $config = Get-GameModesConfig
 $buildId = Get-Date -Format 'yyyyMMddHHmmss'
 $tags = @{}
@@ -46,12 +74,15 @@ $allTags = @($tags.Values) + @($config.modes | ForEach-Object { $_.image }) + @(
 docker save -o $tarPath @($allTags | Select-Object -Unique)
 
 Write-Host 'Importing to node-1 (lobby + proxy)...' -ForegroundColor Cyan
-$sshCmd = "apk add --no-cache openssh-client sshpass && sshpass -p 'SkyPvP2017@' scp -o StrictHostKeyChecking=no /workspace/game-images-unique.tar skypvp-node-1@192.168.0.3:/tmp/game-images-unique.tar && sshpass -p 'SkyPvP2017@' ssh -o StrictHostKeyChecking=no skypvp-node-1@192.168.0.3 ""echo 'SkyPvP2017@' | sudo -S k3s ctr -n k8s.io images import /tmp/game-images-unique.tar"""
+$escapedPassword = $nodePassword.Replace("'", "'\\''")
+$escapedTarget1 = $node1Target.Replace("'", "'\\''")
+$sshCmd = "apk add --no-cache openssh-client sshpass && sshpass -p '$escapedPassword' scp -o StrictHostKeyChecking=no /workspace/game-images-unique.tar $escapedTarget1:/tmp/game-images-unique.tar && sshpass -p '$escapedPassword' ssh -o StrictHostKeyChecking=no $escapedTarget1 ""echo '$escapedPassword' | sudo -S k3s ctr -n k8s.io images import /tmp/game-images-unique.tar"""
 [IO.File]::WriteAllText('import-images-node1.sh', $sshCmd)
 docker run --rm -v "${PWD}:/workspace" -w /workspace alpine sh import-images-node1.sh
 
 Write-Host 'Importing to node-2 (extraction)...' -ForegroundColor Cyan
-$sshCmd2 = "apk add --no-cache openssh-client sshpass && sshpass -p 'SkyPvP2017@' scp -o StrictHostKeyChecking=no /workspace/game-images-unique.tar skypvp-node-2@192.168.0.4:/tmp/game-images-unique.tar && sshpass -p 'SkyPvP2017@' ssh -o StrictHostKeyChecking=no skypvp-node-2@192.168.0.4 ""echo 'SkyPvP2017@' | sudo -S k3s ctr -n k8s.io images import /tmp/game-images-unique.tar"""
+$escapedTarget2 = $node2Target.Replace("'", "'\\''")
+$sshCmd2 = "apk add --no-cache openssh-client sshpass && sshpass -p '$escapedPassword' scp -o StrictHostKeyChecking=no /workspace/game-images-unique.tar $escapedTarget2:/tmp/game-images-unique.tar && sshpass -p '$escapedPassword' ssh -o StrictHostKeyChecking=no $escapedTarget2 ""echo '$escapedPassword' | sudo -S k3s ctr -n k8s.io images import /tmp/game-images-unique.tar"""
 [IO.File]::WriteAllText('import-images-node2.sh', $sshCmd2)
 docker run --rm -v "${PWD}:/workspace" -w /workspace alpine sh import-images-node2.sh
 

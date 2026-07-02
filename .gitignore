@@ -30,6 +30,8 @@ runtime/
 !.env.example
 **/.env
 !**/.env.example
+infra/k3s-install.env
+infra/deploy.local.env
 
 # Ephemeral server state (never commit)
 config/server-templates/**/cache/

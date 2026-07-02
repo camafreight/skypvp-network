@@ -14,6 +14,17 @@ These were removed from disk because they contained credentials or were disposab
 - `bytecode.txt`, `limbo-protocol.txt`
 - `patch*.json` (one-off `kubectl patch` payloads)
 
+## Security — rotate after public push
+
+The initial GitHub push briefly exposed cluster credentials in git history:
+
+| Secret | Was in | Action |
+|--------|--------|--------|
+| **K3s join token** | `infra/install_k3s.sh`, `infra/install_agent.sh` | **Rotate** on the control plane (`k3s token rotate`), update `infra/k3s-install.env` locally |
+| **Node SSH/sudo password** | `deploy-unique-run.ps1` | **Change** on node-1/node-2, set `infra/deploy.local.env` |
+
+Scripts now read from gitignored `infra/k3s-install.env` and `infra/deploy.local.env` (see `*.example` templates). GitHub may still flag the old token in commit history until you rotate it and optionally purge history with `git filter-repo` + force push.
+
 ## Keep — canonical K8s deploy workflow
 
 | Path | Role |
