@@ -76,13 +76,13 @@ docker save -o $tarPath @($allTags | Select-Object -Unique)
 Write-Host 'Importing to node-1 (lobby + proxy)...' -ForegroundColor Cyan
 $escapedPassword = $nodePassword.Replace("'", "'\\''")
 $escapedTarget1 = $node1Target.Replace("'", "'\\''")
-$sshCmd = "apk add --no-cache openssh-client sshpass && sshpass -p '$escapedPassword' scp -o StrictHostKeyChecking=no /workspace/game-images-unique.tar $escapedTarget1:/tmp/game-images-unique.tar && sshpass -p '$escapedPassword' ssh -o StrictHostKeyChecking=no $escapedTarget1 ""echo '$escapedPassword' | sudo -S k3s ctr -n k8s.io images import /tmp/game-images-unique.tar"""
+$sshCmd = "apk add --no-cache openssh-client sshpass && sshpass -p '$escapedPassword' scp -o StrictHostKeyChecking=no /workspace/game-images-unique.tar ${escapedTarget1}:/tmp/game-images-unique.tar && sshpass -p '$escapedPassword' ssh -o StrictHostKeyChecking=no $escapedTarget1 ""echo '$escapedPassword' | sudo -S k3s ctr -n k8s.io images import /tmp/game-images-unique.tar"""
 [IO.File]::WriteAllText('import-images-node1.sh', $sshCmd)
 docker run --rm -v "${PWD}:/workspace" -w /workspace alpine sh import-images-node1.sh
 
 Write-Host 'Importing to node-2 (extraction)...' -ForegroundColor Cyan
 $escapedTarget2 = $node2Target.Replace("'", "'\\''")
-$sshCmd2 = "apk add --no-cache openssh-client sshpass && sshpass -p '$escapedPassword' scp -o StrictHostKeyChecking=no /workspace/game-images-unique.tar $escapedTarget2:/tmp/game-images-unique.tar && sshpass -p '$escapedPassword' ssh -o StrictHostKeyChecking=no $escapedTarget2 ""echo '$escapedPassword' | sudo -S k3s ctr -n k8s.io images import /tmp/game-images-unique.tar"""
+$sshCmd2 = "apk add --no-cache openssh-client sshpass && sshpass -p '$escapedPassword' scp -o StrictHostKeyChecking=no /workspace/game-images-unique.tar ${escapedTarget2}:/tmp/game-images-unique.tar && sshpass -p '$escapedPassword' ssh -o StrictHostKeyChecking=no $escapedTarget2 ""echo '$escapedPassword' | sudo -S k3s ctr -n k8s.io images import /tmp/game-images-unique.tar"""
 [IO.File]::WriteAllText('import-images-node2.sh', $sshCmd2)
 docker run --rm -v "${PWD}:/workspace" -w /workspace alpine sh import-images-node2.sh
 

@@ -147,6 +147,8 @@ spec:
             # TCPShield network and using direct UDP 19132 for Bedrock.
             - name: SPVP_DISABLE_TCPSHIELD
               value: "true"
+            - name: SPVP_PROXY_HEAP
+              value: "2G"
           readinessProbe:
             tcpSocket:
               port: minecraft
@@ -159,11 +161,11 @@ spec:
             failureThreshold: 24
           resources:
             requests:
-              cpu: "250m"
-              memory: "512Mi"
+              cpu: "500m"
+              memory: "2560Mi"
             limits:
-              cpu: "1"
-              memory: "1Gi"
+              cpu: "2"
+              memory: "3Gi"
 ---
 apiVersion: v1
 kind: Service

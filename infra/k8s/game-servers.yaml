@@ -88,8 +88,9 @@ spec:
                   fieldPath: status.podIP
             - name: SPVP_ADVERTISED_PORT
               value: "25565"
+            # Aikar's flags require Xms == Xmx (AlwaysPreTouch); unequal caused GC lag spikes.
             - name: SPVP_JAVA_MIN
-              value: 2G
+              value: 4G
             - name: SPVP_JAVA_MAX
               value: 4G
             - name: SPVP_REDIS_HOST
@@ -171,8 +172,9 @@ spec:
                   optional: true
           resources:
             requests:
+              # AlwaysPreTouch commits the full 4G heap at startup; request must cover it.
               cpu: "1"
-              memory: 3Gi
+              memory: 5Gi
             limits:
               cpu: "4"
               memory: 6Gi
@@ -277,10 +279,11 @@ spec:
                   fieldPath: status.podIP
             - name: SPVP_ADVERTISED_PORT
               value: "25565"
+            # Aikar's flags require Xms == Xmx (AlwaysPreTouch); unequal caused GC lag spikes.
             - name: SPVP_JAVA_MIN
-              value: 8G
+              value: 12G
             - name: SPVP_JAVA_MAX
-              value: 16G
+              value: 12G
             - name: SPVP_REDIS_HOST
               value: redis
             - name: SPVP_REDIS_PORT
@@ -360,11 +363,12 @@ spec:
                   optional: true
           resources:
             requests:
+              # AlwaysPreTouch commits the full 12G heap at startup; request must cover it.
               cpu: "2"
-              memory: 10Gi
+              memory: 13Gi
             limits:
               cpu: "8"
-              memory: 18Gi
+              memory: 14Gi
           readinessProbe:
             tcpSocket:
               port: minecraft

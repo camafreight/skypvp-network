@@ -16,6 +16,10 @@ data:
     keepalive-time: 0
     connection-timeout: 5000
 
+# Do not resend the full Brigadier command tree on permission/world-context changes
+# (ClientboundCommandsPacket rebuilds cost ~57ms per player; see extraction config).
+update-client-command-list: false
+
 messaging-service: redis
 
 redis:

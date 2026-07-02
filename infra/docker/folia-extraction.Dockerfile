@@ -5,7 +5,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends gettext-base \
  && rm -rf /var/lib/apt/lists/*
 ENV SPVP_USE_FOLIA=true
-ENV JAVA_OPTS="-Xms8G -Xmx16G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200"
+# Heap is controlled via SPVP_JAVA_MIN/SPVP_JAVA_MAX (paper-entrypoint.sh); JAVA_OPTS is not read.
 WORKDIR /data/runtime
 COPY config/server-templates/extraction /opt/skypvp/server-template
 COPY config/world-templates /opt/skypvp/world-templates

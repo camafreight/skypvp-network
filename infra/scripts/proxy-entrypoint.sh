@@ -82,6 +82,9 @@ if [ "$SPVP_DISABLE_TCPSHIELD" = "true" ]; then
   rm -f /data/runtime/plugins/TCPShield*.jar || true
 fi
 
-java ${SPVP_PROXY_JAVA_OPTS:-} -Xms512M -Xmx512M -jar velocity.jar &
+# Velocity + Geyser + plugins in 512M caused constant GC pressure -> proxy-side latency
+# (rubberbanding for every player even when server MSPT was healthy).
+PROXY_HEAP="${SPVP_PROXY_HEAP:-2G}"
+java ${SPVP_PROXY_JAVA_OPTS:-} -Xms${PROXY_HEAP} -Xmx${PROXY_HEAP} -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -jar velocity.jar &
 JAVA_PID=$!
 wait "$JAVA_PID"

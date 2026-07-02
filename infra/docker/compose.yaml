@@ -48,7 +48,8 @@ services:
       SPVP_PRESET_ID: lobby-template
       SPVP_ADVERTISED_HOST: lobby-1
       SPVP_ADVERTISED_PORT: "25565"
-      SPVP_JAVA_MIN: 512M
+      # Aikar's flags require Xms == Xmx; unequal values cause GC lag spikes.
+      SPVP_JAVA_MIN: 1536M
       SPVP_JAVA_MAX: 1536M
     mem_limit: 2g
     volumes:
@@ -72,7 +73,8 @@ services:
       SPVP_PRESET_ID: extraction-template
       SPVP_ADVERTISED_HOST: extraction-1
       SPVP_ADVERTISED_PORT: "25565"
-      SPVP_JAVA_MIN: 1G
+      # Aikar's flags require Xms == Xmx; unequal values cause GC lag spikes.
+      SPVP_JAVA_MIN: 2G
       SPVP_JAVA_MAX: 2G
     mem_limit: 3g
     volumes:

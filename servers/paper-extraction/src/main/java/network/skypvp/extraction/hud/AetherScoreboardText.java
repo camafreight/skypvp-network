@@ -17,6 +17,10 @@ public final class AetherScoreboardText {
     private static final Pattern GRADIENT = Pattern.compile("<gradient:([^>]+)>");
     private static final String GLOW_TAG = "<anim:glow>";
     private static final ConcurrentHashMap<String, Component> STATIC_RAW_CACHE = new ConcurrentHashMap<>();
+    // Dynamic lines embed interpolated values, so identical strings recur between value changes
+    // (most refreshes). Caching skips repeated MiniMessage parses, the top scoreboard cost in profiles.
+    private static final ConcurrentHashMap<String, Component> DYNAMIC_RAW_CACHE = new ConcurrentHashMap<>();
+    private static final int DYNAMIC_CACHE_MAX = 4096;
 
     private AetherScoreboardText() {
     }
@@ -231,8 +235,20 @@ public final class AetherScoreboardText {
             return switch (entry.kind) {
                 case STATIC -> renderStatic(entry.template, clientLocale);
                 case ANIMATED -> render(entry.template, tickMillis, clientLocale);
-                case DYNAMIC -> ExtractionTexts.miniMessageTemplate(prepareTemplate(entry.template, 0L), clientLocale);
+                case DYNAMIC -> renderDynamicCached(entry.template, clientLocale);
             };
+        }
+
+        private static Component renderDynamicCached(String template, String locale) {
+            String prepared = prepareTemplate(template, 0L);
+            if (prepared.isEmpty()) {
+                return Component.empty();
+            }
+            if (DYNAMIC_RAW_CACHE.size() > DYNAMIC_CACHE_MAX) {
+                DYNAMIC_RAW_CACHE.clear();
+            }
+            String cacheKey = locale + "\u0000" + prepared;
+            return DYNAMIC_RAW_CACHE.computeIfAbsent(cacheKey, ignored -> ExtractionTexts.miniMessageTemplate(prepared, locale));
         }
 
         private enum TitleKind {

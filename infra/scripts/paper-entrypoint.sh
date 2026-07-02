@@ -5,8 +5,10 @@ set -eu
 . /opt/skypvp/lib/render-server-templates.sh
 . /opt/skypvp/lib/install-floodgate-key.sh
 
-JAVA_MIN="${SPVP_JAVA_MIN:-1G}"
+# Aikar's flags (AlwaysPreTouch, G1 sizing) assume Xms == Xmx; unequal values cause
+# heap-resize pauses that show up as lag spikes/rubberbanding. Default MIN to MAX.
 JAVA_MAX="${SPVP_JAVA_MAX:-1G}"
+JAVA_MIN="${SPVP_JAVA_MIN:-$JAVA_MAX}"
 REDIS_HOST="${SPVP_REDIS_HOST:-redis}"
 REDIS_PORT="${SPVP_REDIS_PORT:-6379}"
 REDIS_PASSWORD="${SPVP_REDIS_PASSWORD:-}"
