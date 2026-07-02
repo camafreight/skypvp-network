@@ -1,0 +1,20 @@
+# Timed breach bosses for Aether Ruins.
+# Referenced from config/map-templates/aether-ruins/meta.json bossSpawns.mythicMobId
+RuinsWither:
+  Type: WITHER
+  Display: '&4&lRuins Wither'
+  Health: 600
+  Damage: 12
+  Options:
+    AlwaysShowName: true
+    PreventOtherDrops: true
+    PreventRandomEquipment: true
+    MovementSpeed: 0.28
+    Silent: false
+  AIGoalSelectors:
+  - clear
+  - meleeattack
+  - randomstroll
+  AITargetSelectors:
+  - clear
+  - players

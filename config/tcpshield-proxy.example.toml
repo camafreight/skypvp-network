@@ -1,0 +1,18 @@
+# TCPShield (RealIP) config for Velocity proxies.
+# Source: https://github.com/TCPShield/RealIP
+# Keep plugin mode enabled only when using TCPShield plugin mode (not proxy-protocol mode).
+
+# Please keep this true while using TCPShield in production.
+only-allow-proxy-connections = true
+
+# available modes: system, htpdate, off
+timestamp-validation = 'htpdate'
+
+# Turn on only while diagnosing setup issues.
+debug-mode = false
+
+# Enable only when using TCPShield's Bedrock/Geyser tunnel.
+enable-geyser-support = false
+
+# Recommended for Velocity handshake handling.
+pre-login-event = true

@@ -1,0 +1,31 @@
+package network.skypvp.paper.model;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Mutable model describing a single hologram: its unique {@code id}, world
+ * {@code anchor}, text {@code lines}, interaction settings, and optional
+ * parent/offset wiring used for multi-line or child holograms.
+ */
+public class HologramDefinition {
+   /** Decoration scope ({@code server_id} column). */
+   public String scope;
+   public String id = "hologram";
+   public WorldPoint anchor = new WorldPoint();
+   public List<String> lines = new ArrayList<>();
+   public boolean interactive = false;
+   public int hitboxSize = 1;
+   public String actionType = "NONE";
+   public String actionData = "";
+   public String parentId = null;
+   public double offsetX = 0.0;
+   public double offsetY = 0.0;
+   public double offsetZ = 0.0;
+   public boolean perPlayer = false;
+   public String billboard = "CENTER";
+   public double scale = 1.0;
+
+   public HologramDefinition() {
+   }
+}

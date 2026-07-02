@@ -1,0 +1,52 @@
+package net.elytrium.limboapi.api.protocol.packets.data;
+
+public class MapData {
+   public static final int MAP_DIM_SIZE = 128;
+   public static final int MAP_SIZE = 16384;
+   private final int columns;
+   private final int rows;
+   private final int posX;
+   private final int posY;
+   private final byte[] data;
+
+   public MapData(byte[] data) {
+      this(0, data);
+   }
+
+   public MapData(int posX, byte[] data) {
+      this(128, 128, posX, 0, data);
+   }
+
+   public MapData(int columns, int rows, int posX, int posY, byte[] data) {
+      this.columns = columns;
+      this.rows = rows;
+      this.posX = posX;
+      this.posY = posY;
+      this.data = data;
+   }
+
+   public int getColumns() {
+      return this.columns;
+   }
+
+   public int getRows() {
+      return this.rows;
+   }
+
+   public int getX() {
+      return this.posX;
+   }
+
+   public int getY() {
+      return this.posY;
+   }
+
+   public byte[] getData() {
+      return this.data;
+   }
+
+   @Override
+   public String toString() {
+      return "MapData{columns=" + this.columns + ", rows=" + this.rows + ", posX=" + this.posX + ", posY=" + this.posY + "}";
+   }
+}

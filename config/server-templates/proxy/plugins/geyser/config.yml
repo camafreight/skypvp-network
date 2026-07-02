@@ -1,0 +1,31 @@
+# Geyser on Velocity — Bedrock clients connect to UDP ${SPVP_GEYSER_BEDROCK_PORT}.
+# Java auth is handled by Floodgate (see plugins/floodgate/key.pem).
+
+bedrock:
+  address: 0.0.0.0
+  port: ${SPVP_GEYSER_BEDROCK_PORT}
+  clone-remote-port: false
+  motd1: "${SPVP_GEYSER_MOTD1}"
+  motd2: "${SPVP_GEYSER_MOTD2}"
+  server-name: "${SPVP_GEYSER_SERVER_NAME}"
+  compression-level: 6
+  enable-proxy-protocol: false
+
+remote:
+  address: auto
+  port: auto
+  auth-type: floodgate
+  use-proxy-protocol: false
+  forward-hostname: false
+
+floodgate-key-file: ../floodgate/key.pem
+
+debug-mode: false
+passthrough-motd: false
+passthrough-player-counts: true
+passthrough-protocol-name: false
+legacy-ping-passthrough: false
+ping-passthrough-interval: 3
+max-players: 500
+show-coordinates: true
+show-cooldown: title

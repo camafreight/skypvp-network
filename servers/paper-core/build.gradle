@@ -1,0 +1,44 @@
+plugins {
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+dependencies {
+    implementation project(':shared:network-core')
+    implementation project(':servers:paper-gamemode-api')
+    implementation "com.zaxxer:HikariCP:${rootProject.ext.hikariVersion}"
+    implementation 'org.postgresql:postgresql:42.7.4'
+    compileOnly "io.papermc.paper:paper-api:${rootProject.ext.paperApiVersion}"
+    compileOnly "net.luckperms:api:${rootProject.ext.luckPermsApiVersion}"
+    compileOnly "me.clip:placeholderapi:${rootProject.ext.placeholderApiVersion}"
+    compileOnly "com.github.retrooper:packetevents-spigot:${rootProject.ext.packetEventsVersion}"
+    compileOnly files('E:/Minecraft/skypvp-web/skypvp-web-plugin/build/libs/skypvp-web-plugin.jar')
+    testImplementation "io.papermc.paper:paper-api:${rootProject.ext.paperApiVersion}"
+    testImplementation "net.luckperms:api:${rootProject.ext.luckPermsApiVersion}"
+    testImplementation "me.clip:placeholderapi:${rootProject.ext.placeholderApiVersion}"
+    testImplementation files('E:/Minecraft/skypvp-web/skypvp-web-plugin/build/libs/skypvp-web-plugin.jar')
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.1'
+    testImplementation 'org.mockito:mockito-core:5.8.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.8.0'
+    testImplementation 'com.github.seeseemelk:MockBukkit-v1.21:3.109.0'
+}
+
+processResources {
+    filesMatching('plugin.yml') {
+        expand(version: project.version)
+    }
+}
+
+jar {
+    archiveClassifier = 'thin'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    archiveFileName = 'skypvp-paper-core.jar'
+}
+
+build {
+    dependsOn shadowJar
+}

@@ -1,0 +1,190 @@
+# Ballistics tuned for COD-style engagement: fast, flat trajectories at typical PvP
+# ranges. Vanilla WM defaults (Gravity 9.8, Drag 0.99) drop far too quickly in MC scale.
+
+sub_machine_gun_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Maximum:
+      Speed: 135
+    Gravity: 0.75
+    Drag:
+      Base: 0.998
+      In_Water: 0.992
+      When_Raining_Or_Snowing: 0.996
+  Through:
+    Maximum_Through_Amount: 1
+    Blocks:
+      Default_Speed_Multiplier: 0.8
+      Whitelist: true
+      List:
+        - "$GLASS"
+    Entities:
+      Allow_Any: true
+      Default_Speed_Multiplier: 0.7
+
+sniper_rifle_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Minimum:
+      Speed: 280
+    Gravity: 0.45
+    Drag:
+      Base: 0.999
+      In_Water: 0.994
+      When_Raining_Or_Snowing: 0.997
+  Through:
+    Maximum_Through_Amount: 4
+    Blocks:
+      Default_Speed_Multiplier: 0.8
+      Whitelist: true
+      List:
+        - "$GLASS"
+    Entities:
+      Allow_Any: true
+      Default_Speed_Multiplier: 0.7
+
+shotgun_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Gravity: 2.2
+    Minimum:
+      Speed: 85
+    Drag:
+      Base: 0.996
+      In_Water: 0.988
+      When_Raining_Or_Snowing: 0.992
+  Bouncy:
+    Maximum_Bounce_Amount: 1
+    Blocks:
+      Allow_Any: true
+  Through:
+    Maximum_Through_Amount: 1
+    Blocks:
+      Whitelist: true
+      List:
+        - "$GLASS"
+
+rocket_launcher_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Minimum:
+      Speed: 55
+    Gravity: 3.5
+    Drag:
+      Base: 0.995
+      In_Water: 0.96
+      When_Raining_Or_Snowing: 0.98
+
+fatman_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Minimum:
+      Speed: 14
+    Gravity: 4.0
+    Drag:
+      Base: 0.99
+      In_Water: 0.96
+      When_Raining_Or_Snowing: 0.98
+
+fatman_rock_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Minimum:
+      Speed: 14
+    Gravity: 4.0
+    Drag:
+      Base: 0.99
+      In_Water: 0.96
+      When_Raining_Or_Snowing: 0.98
+  Through:
+    Maximum_Through_Amount: 20
+    Blocks:
+      Default_Speed_Multiplier: 0.8
+      Whitelist: true
+      List:
+        - "$GLASS"
+    Entities:
+      Allow_Any: true
+      Default_Speed_Multiplier: 1.0
+  Bouncy:
+    Maximum_Bounce_Amount: 1
+    Blocks:
+      Allow_Any: true
+      Default_Speed_Multiplier: 0.9
+    Rolling:
+      Required_Motion_To_Start_Rolling: 100
+      Blocks:
+        Allow_Any: true
+        Default_Speed_Multiplier: 0.99
+
+assault_rifle_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Minimum:
+      Speed: 115
+    Gravity: 0.8
+    Drag:
+      Base: 0.998
+      In_Water: 0.992
+      When_Raining_Or_Snowing: 0.996
+  Through:
+    Maximum_Through_Amount: 2
+    Blocks:
+      Default_Speed_Multiplier: 0.8
+      Whitelist: true
+      List:
+        - "$GLASS"
+    Entities:
+      Allow_Any: true
+      Default_Speed_Multiplier: 0.7
+
+pistol_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Gravity: 0.9
+    Drag:
+      Base: 0.998
+      In_Water: 0.992
+      When_Raining_Or_Snowing: 0.996
+
+marksman_rifle_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Minimum:
+      Speed: 240
+    Gravity: 0.65
+    Drag:
+      Base: 0.999
+      In_Water: 0.994
+      When_Raining_Or_Snowing: 0.997
+  Through:
+    Maximum_Through_Amount: 3
+    Blocks:
+      Default_Speed_Multiplier: 0.7
+      Whitelist: true
+      List:
+        - "$GLASS"
+    Entities:
+      Allow_Any: true
+      Default_Speed_Multiplier: 0.6
+
+light_machine_gun_projectile:
+  Projectile_Settings:
+    Type: "invisible"
+    Minimum:
+      Speed: 110
+    Gravity: 0.85
+    Drag:
+      Base: 0.998
+      In_Water: 0.992
+      When_Raining_Or_Snowing: 0.996
+  Through:
+    Maximum_Through_Amount: 5
+    Blocks:
+      Default_Speed_Multiplier: 0.8
+      Whitelist: true
+      List:
+        - "$GLASS"
+    Entities:
+      Allow_Any: true
+      Default_Speed_Multiplier: 0.7

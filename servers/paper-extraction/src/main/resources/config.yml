@@ -1,0 +1,3 @@
+# SkyPvPExtractionMode plugin settings.
+# In K8s, SPVP_MAP_TEMPLATE_ROOT (/opt/skypvp/map-templates) takes precedence over this value.
+map-template-root: ""

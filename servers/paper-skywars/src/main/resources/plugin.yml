@@ -1,0 +1,6 @@
+name: SkyPvPSkyWars
+main: network.SkyPvP.skywars.SkyWarsPlugin
+version: ${version}
+api-version: '1.21'
+author: SkyPvP
+description: SkyWars gamemode plugin isolated from core mechanics.

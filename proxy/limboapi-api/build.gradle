@@ -1,0 +1,17 @@
+repositories {
+    maven {
+        name = 'elytrium-repo'
+        url = 'https://maven.elytrium.net/repo/'
+    }
+}
+
+dependencies {
+    compileOnly "com.velocitypowered:velocity-api:${rootProject.ext.velocityApiVersion}"
+    api 'net.elytrium.commons:config:1.2.3'
+    api 'net.elytrium.commons:utils:1.2.3'
+    api 'net.elytrium.commons:velocity:1.2.3'
+    api 'net.elytrium.commons:kyori:1.2.3'
+    api 'net.kyori:adventure-nbt:4.15.0'
+
+    compileOnly 'com.github.spotbugs:spotbugs-annotations:4.7.3'
+}

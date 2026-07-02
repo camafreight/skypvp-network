@@ -1,0 +1,163 @@
+# Aether Breach runtime configuration for extraction pods.
+# Map templates: SPVP_MAP_TEMPLATE_ROOT or ../../config/map-templates
+# Map registry: breach-maps.yml (this folder)
+
+maps-file: breach-maps.yml
+
+settings:
+  max-breaches-per-pod: 9
+  max-players-per-pod: 500
+  min-players: 1
+  starting-countdown-seconds: 15
+  reset-delay-seconds: 8
+  queue-timeout-seconds: 180
+  extract-dwell-seconds: 30
+  combat-tag-seconds: 15
+  default-map: aether-ruins
+  # Chests placed in the map world but not listed in meta.json lootChests use this tier.
+  auto-discover-chests: true
+  default-loot-tier: defaultChests
+  # Fake beacon beam (per-player sendBlockChange) turns orange in the last N seconds of a match.
+  extract-closing-soon-seconds: 300
+  extract-zone-particles-enabled: true
+  extract-zone-fake-beacon-enabled: true
+  enhanced-loot-chests: true
+  place-configured-chest-blocks: true
+  loot-chest-ambient-interval-ticks: 40
+  loot-chest-ambient-radius: 15.0
+  # bossSpawns in map meta.json use MythicMobs (mythicMobId). See plugins/MythicMobs/Mobs/.
+
+hitscan:
+  enabled: true
+  max-range-blocks: 120
+  tracer-spacing-blocks: 3.0
+  tracer-view-range-blocks: 48
+  tracer-particle: CRIT
+  impact:
+    enabled: true
+    view-range-blocks: 48
+    block-particle-count: 6
+    entity-particle-count: 4
+    block-chip-overlay: true
+    block-chip-damage: 0.22
+    entity-particle: ENCHANTED_HIT
+  visuals:
+    defer-ticks: 1
+    max-jobs-per-tick: 64
+    queue-capacity: 2048
+    max-tracer-points: 20
+    async-prep: true
+  combat:
+    dispatch-threads: 4
+    queue-capacity: 4096
+    defer-ticks: 0
+  simulated-projectile-weapons:
+    - Combat_Knife
+    - Stim
+    - Grenade
+    - Semtex
+    - Flashbang
+    - Cluster_Grenade
+    - Airstrike
+    - Sky_Torch
+    - RPG_7
+    - Fatman
+
+loot-chest-fx:
+  defaultChests:
+    particle: END_ROD
+    sound: BLOCK_NOTE_BLOCK_CHIME
+    volume: 0.35
+    pitch: 0.95
+    particle-count: 4
+    particle-speed: 0.01
+    glow-color: yellow
+  common:
+    particle: END_ROD
+    sound: BLOCK_NOTE_BLOCK_CHIME
+    volume: 0.35
+    pitch: 1.0
+    particle-count: 4
+    particle-speed: 0.01
+    glow-color: yellow
+  rare:
+    particle: WAX_OFF
+    sound: BLOCK_AMETHYST_BLOCK_CHIME
+    volume: 0.45
+    pitch: 1.1
+    particle-count: 5
+    particle-speed: 0.015
+    glow-color: aqua
+  epic:
+    particle: TOTEM_OF_UNDYING
+    sound: BLOCK_BEACON_AMBIENT
+    volume: 0.5
+    pitch: 1.2
+    particle-count: 6
+    particle-speed: 0.02
+    glow-color: light_purple
+
+# Loot tier entries support three formats:
+#   MATERIAL:amount:chance          — vanilla items (e.g. DIAMOND:2:0.85)
+#   wm|weapon_title|amount|chance  — WeaponMechanics weapon (requires WM plugin)
+#   codec|amount|chance|payload    — ItemStackCodec base64 from ItemStackCodec.encode()
+# YAML map form is also supported:
+#   - type: wm
+#     weapon: Assault_Rifle
+#     amount: 1
+#     chance: 0.35
+#   - type: codec
+#     payload: "<base64>"
+#     amount: 1
+#     chance: 0.5
+loot-tiers:
+  defaultChests:
+    - wm|Combat_Knife|1|0.55
+    - wm|357_Magnum|1|0.15
+    - wm|Flashbang|1|0.2
+    - STONE_SWORD:1:0.85
+    - WOODEN_AXE:1:0.55
+    - COOKED_BEEF:4:0.75
+    - BREAD:6:0.7
+    - ARROW:8:0.5
+    - LEATHER_BOOTS:1:0.35
+    - LEATHER_CHESTPLATE:1:0.3
+    - STICK:4:0.4
+  common:
+    - wm|Uzi|1|0.35
+    - wm|357_Magnum|1|0.3
+    - wm|Combat_Knife|1|0.5
+    - wm|Grenade|1|0.22
+    - wm|Stim|1|0.4
+    - IRON_SWORD:1:0.65
+    - BREAD:8:0.85
+    - COOKED_PORKCHOP:6:0.7
+    - ARROW:16:0.75
+    - IRON_HELMET:1:0.4
+    - IRON_LEGGINGS:1:0.35
+    - SHIELD:1:0.25
+  rare:
+    - wm|AK_47|1|0.28
+    - wm|M4A1|1|0.25
+    - wm|Origin_12|1|0.22
+    - wm|Kar98k|1|0.18
+    - wm|50_GS|1|0.2
+    - wm|Semtex|1|0.15
+    - wm|Stim|2|0.45
+    - DIAMOND:2:0.85
+    - GOLDEN_APPLE:2:0.65
+    - IRON_CHESTPLATE:1:0.5
+    - IRON_BOOTS:1:0.45
+    - ENCHANTED_GOLDEN_APPLE:1:0.12
+  epic:
+    - wm|AX_50|1|0.22
+    - wm|RPG_7|1|0.15
+    - wm|MG34|1|0.18
+    - wm|FN_FAL|1|0.2
+    - wm|Airstrike|1|0.08
+    - wm|Cluster_Grenade|2|0.25
+    - DIAMOND_SWORD:1:0.55
+    - DIAMOND_CHESTPLATE:1:0.35
+    - NETHERITE_INGOT:1:0.12
+    - TOTEM_OF_UNDYING:1:0.1
+    - ENCHANTED_GOLDEN_APPLE:2:0.18

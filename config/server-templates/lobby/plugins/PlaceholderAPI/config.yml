@@ -1,0 +1,11 @@
+# PlaceholderAPI — lobby defaults.
+check_updates: true
+cloud_enabled: true
+cloud_sorting: "name"
+boolean:
+  'true': 'yes'
+  'false': 'no'
+date_format: MM/dd/yy HH:mm:ss
+detect_malicious_expansions: true
+use_adventure_provided_replacer: false
+debug: false

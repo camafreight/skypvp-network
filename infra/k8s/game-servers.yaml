@@ -1,0 +1,388 @@
+# Active game modes: Lobby (node-1) + Extraction (skypvp-node-2).
+# Mode definitions: infra/k8s/game-modes.json
+# Presets are baked into Paper images at /opt/skypvp/world-templates (no Longhorn preset PVC).
+# Apply: .\infra\k8s\scripts\Apply-GameModes.ps1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: skypvp-lobby
+  namespace: skypvp-network
+  labels:
+    app: skypvp-paper
+    skypvp.io/mode: lobby
+spec:
+  clusterIP: None
+  ports:
+    - name: minecraft
+      port: 25565
+      targetPort: 25565
+    - name: bedrock
+      port: 19132
+      targetPort: 19132
+      protocol: UDP
+  selector:
+    app: skypvp-paper
+    skypvp.io/mode: lobby
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: skypvp-lobby
+  namespace: skypvp-network
+  labels:
+    app: skypvp-paper
+    skypvp.io/mode: lobby
+    skypvp.io/workload-class: game-server
+spec:
+  serviceName: skypvp-lobby
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app: skypvp-paper
+      skypvp.io/mode: lobby
+  template:
+    metadata:
+      labels:
+        app: skypvp-paper
+        skypvp.io/mode: lobby
+        skypvp.io/workload-class: game-server
+    spec:
+      nodeSelector:
+        skypvp.gg/role: game
+        kubernetes.io/hostname: node-1
+      tolerations:
+        - key: skypvp.gg/role
+          operator: Equal
+          value: game
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: paper
+          image: ghcr.io/skypvp/paper-core:lobby-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - /opt/skypvp/entrypoint.sh
+          ports:
+            - containerPort: 25565
+              name: minecraft
+            - containerPort: 19132
+              name: bedrock
+              protocol: UDP
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SPVP_SERVER_ROLE
+              value: LOBBY
+            - name: SPVP_PRESET_ID
+              value: lobby-template
+            - name: SPVP_PRESET_ROOT
+              value: /opt/skypvp/world-templates
+            - name: SPVP_ADVERTISED_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SPVP_ADVERTISED_PORT
+              value: "25565"
+            - name: SPVP_JAVA_MIN
+              value: 2G
+            - name: SPVP_JAVA_MAX
+              value: 4G
+            - name: SPVP_REDIS_HOST
+              value: redis
+            - name: SPVP_REDIS_PORT
+              value: "6379"
+            - name: SPVP_POSTGRES_HOST
+              value: postgres
+            - name: SPVP_POSTGRES_PORT
+              value: "5432"
+            - name: SPVP_POSTGRES_DATABASE
+              value: skypvp_network
+            - name: SPVP_POSTGRES_USERNAME
+              value: skypvp
+            - name: SPVP_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: REDIS_PASSWORD
+                  optional: true
+            - name: SPVP_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: POSTGRES_PASSWORD
+            - name: SPVP_IN_GAME_PLUGIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: IN_GAME_PLUGIN_SECRET
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_ENABLED
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_ENDPOINT
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_API_KEY
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_ENABLED
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_ENDPOINT
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_API_KEY
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_REGION
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_DEBUG
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_DEBUG
+                  optional: true
+          resources:
+            requests:
+              cpu: "1"
+              memory: 3Gi
+            limits:
+              cpu: "4"
+              memory: 6Gi
+          readinessProbe:
+            tcpSocket:
+              port: minecraft
+            periodSeconds: 5
+            failureThreshold: 6
+          startupProbe:
+            tcpSocket:
+              port: minecraft
+            periodSeconds: 5
+            failureThreshold: 60
+          volumeMounts:
+            - name: runtime-world
+              mountPath: /data/runtime/world
+      volumes:
+        - name: runtime-world
+          emptyDir: {}
+  updateStrategy:
+    type: RollingUpdate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: skypvp-extraction
+  namespace: skypvp-network
+  labels:
+    app: skypvp-paper
+    skypvp.io/mode: extraction
+spec:
+  clusterIP: None
+  ports:
+    - name: minecraft
+      port: 25565
+      targetPort: 25565
+  selector:
+    app: skypvp-paper
+    skypvp.io/mode: extraction
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: skypvp-extraction
+  namespace: skypvp-network
+  labels:
+    app: skypvp-paper
+    skypvp.io/mode: extraction
+    skypvp.io/workload-class: game-server
+spec:
+  serviceName: skypvp-extraction
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: skypvp-paper
+      skypvp.io/mode: extraction
+  template:
+    metadata:
+      labels:
+        app: skypvp-paper
+        skypvp.io/mode: extraction
+        skypvp.io/workload-class: game-server
+    spec:
+      nodeSelector:
+        skypvp.gg/role: game
+        kubernetes.io/hostname: skypvp-node-2
+      tolerations:
+        - key: skypvp.gg/role
+          operator: Equal
+          value: game
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 40
+      containers:
+        - name: paper
+          image: ghcr.io/skypvp/paper-core:extraction-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - /opt/skypvp/entrypoint.sh
+          ports:
+            - containerPort: 25565
+              name: minecraft
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SPVP_SERVER_ROLE
+              value: EXTRACTION
+            - name: SPVP_USE_FOLIA
+              value: "true"
+            - name: SPVP_PRESET_ID
+              value: extraction-template
+            - name: SPVP_PRESET_ROOT
+              value: /opt/skypvp/world-templates
+            - name: SPVP_MAP_TEMPLATE_ROOT
+              value: /opt/skypvp/map-templates
+            - name: SPVP_ADVERTISED_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SPVP_ADVERTISED_PORT
+              value: "25565"
+            - name: SPVP_JAVA_MIN
+              value: 8G
+            - name: SPVP_JAVA_MAX
+              value: 16G
+            - name: SPVP_REDIS_HOST
+              value: redis
+            - name: SPVP_REDIS_PORT
+              value: "6379"
+            - name: SPVP_POSTGRES_HOST
+              value: postgres
+            - name: SPVP_POSTGRES_PORT
+              value: "5432"
+            - name: SPVP_POSTGRES_DATABASE
+              value: skypvp_network
+            - name: SPVP_POSTGRES_USERNAME
+              value: skypvp
+            - name: SPVP_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: REDIS_PASSWORD
+                  optional: true
+            - name: SPVP_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: POSTGRES_PASSWORD
+            - name: SPVP_IN_GAME_PLUGIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: IN_GAME_PLUGIN_SECRET
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_ENABLED
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_ENDPOINT
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_API_KEY
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_ENABLED
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_ENDPOINT
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_API_KEY
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_REGION
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_DEBUG
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_DEBUG
+                  optional: true
+          resources:
+            requests:
+              cpu: "2"
+              memory: 10Gi
+            limits:
+              cpu: "8"
+              memory: 18Gi
+          readinessProbe:
+            tcpSocket:
+              port: minecraft
+            periodSeconds: 5
+            failureThreshold: 6
+          startupProbe:
+            tcpSocket:
+              port: minecraft
+            periodSeconds: 5
+            failureThreshold: 60
+          volumeMounts:
+            # Mount the ephemeral volume at the whole runtime dir (not just /world) so breach
+            # instance worlds (created under the world container at runtime) and the main world
+            # share one ephemeral filesystem.
+            - name: runtime-data
+              mountPath: /data/runtime
+      volumes:
+        - name: runtime-data
+          emptyDir: {}
+  updateStrategy:
+    type: RollingUpdate

@@ -1,0 +1,12 @@
+# Deprecated: Paper entrypoint is baked into game-server images at /opt/skypvp/entrypoint.sh.
+# Plugin configs live in config/server-templates/{lobby,extraction}/ and are rendered at start.
+# This ConfigMap is kept only so older apply scripts do not fail; it is not mounted by game-servers.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: skypvp-paper-entrypoint
+  namespace: skypvp-network
+data:
+  README: |
+    Entrypoint moved to infra/scripts/paper-entrypoint.sh (baked into images).
+    Edit config/server-templates/ for plugin configs.

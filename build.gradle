@@ -1,0 +1,468 @@
+plugins {
+    id 'base'
+}
+
+ext {
+    javaVersion = 25
+    velocityApiVersion = '3.5.0-SNAPSHOT'
+    paperMinecraftVersion = '1.21.11'
+    paperApiVersion = '26.1.2.build.64-stable'
+    adventureVersion = '4.17.0'
+    gsonVersion = '2.11.0'
+    hikariVersion = '5.1.0'
+    jedisVersion = '5.1.5'
+    slf4jVersion = '2.0.13'
+    luckPermsApiVersion = '5.4'
+    placeholderApiVersion = '2.12.2'
+    packetEventsVersion = '2.13.0'
+    // Worlds 3.12.4 is the line that targets Minecraft 1.21.11 on Folia (the 4.x line is 26.1.2-only).
+    worldsApiVersion = '3.12.4'
+    worldsPluginVersion = '3.12.4'
+    // Folia runtime is pinned to the same Minecraft version as the rest of the stack (1.21.11).
+    // We compile against the newer paper-api (paperApiVersion) for forward-compat, but RUN on 1.21.11.
+    foliaMinecraftVersion = '1.21.11'
+}
+
+allprojects {
+    group = 'network.skypvp'
+    version = '0.1.0-SNAPSHOT'
+
+    repositories {
+        mavenCentral()
+        maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+        maven { url = 'https://repo.extendedclip.com/releases/' }
+        maven { url = 'https://repo.codemc.io/repository/maven-releases/' }
+        maven { url = 'https://jitpack.io' }
+    }
+}
+
+task buildForkedLimboApi(type: Copy) {
+    group = 'build'
+    description = 'Stages the recovered SkyPvP LimboAPI plugin jar. The vendored fork build sources were lost in the repo deletion, so deployJars consumes the recovered prebuilt artifact instead.'
+    from file('recovered-jars/skypvp-limboapi.jar')
+    into file('vendor/limboapi-fork/plugin/build/libs')
+    rename { 'skypvp-limboapi.jar' }
+}
+
+ext {
+    bedrockVersions = new Properties().with {
+        file('vendor/bedrock-plugins/versions.properties').withInputStream { load(it) }
+        it
+    }
+    bedrockPluginDir = rootDir.toPath().resolve('vendor/bedrock-plugins')
+    luckPermsVersions = new Properties().with {
+        file('vendor/luckperms/versions.properties').withInputStream { load(it) }
+        it
+    }
+    luckPermsPluginDir = rootDir.toPath().resolve('vendor/luckperms')
+    foliaVendorDir = rootDir.toPath().resolve('vendor/folia')
+    sparkVersions = new Properties().with {
+        file('vendor/spark/versions.properties').withInputStream { load(it) }
+        it
+    }
+    sparkPluginDir = rootDir.toPath().resolve('vendor/spark')
+}
+
+task downloadBedrockPlugins {
+    group = 'deployment'
+    description = 'Downloads pinned Geyser and Floodgate jars from the GeyserMC CDN into vendor/bedrock-plugins/.'
+
+    doLast {
+        bedrockPluginDir.toFile().mkdirs()
+        def downloads = [
+            'Geyser-Velocity.jar'     : "https://download.geysermc.org/v2/projects/geyser/versions/${bedrockVersions['geyser.version']}/builds/${bedrockVersions['geyser.build']}/downloads/velocity",
+            'floodgate-velocity.jar'  : "https://download.geysermc.org/v2/projects/floodgate/versions/${bedrockVersions['floodgate.version']}/builds/${bedrockVersions['floodgate.build']}/downloads/velocity",
+            'floodgate-spigot.jar'    : "https://download.geysermc.org/v2/projects/floodgate/versions/${bedrockVersions['floodgate.version']}/builds/${bedrockVersions['floodgate.build']}/downloads/spigot",
+        ]
+        downloads.each { name, url ->
+            def dst = bedrockPluginDir.resolve(name).toFile()
+            if (dst.exists()) {
+                logger.lifecycle("[downloadBedrockPlugins] ${name} already present, skipping download")
+                return
+            }
+            logger.lifecycle("[downloadBedrockPlugins] ${url}")
+            dst.withOutputStream { out ->
+                new URL(url).withInputStream { inp -> out << inp }
+            }
+            logger.lifecycle("[downloadBedrockPlugins] ${name} \u2192 vendor/bedrock-plugins/")
+        }
+    }
+}
+
+task downloadLuckPermsPlugins {
+    group = 'deployment'
+    description = 'Downloads pinned LuckPerms jars from Modrinth into vendor/luckperms/.'
+
+    doLast {
+        luckPermsPluginDir.toFile().mkdirs()
+        def version = luckPermsVersions['version']
+        def downloads = [
+            "LuckPerms-Bukkit-${version}.jar"  : luckPermsVersions['bukkit.url'],
+            "LuckPerms-Velocity-${version}.jar": luckPermsVersions['velocity.url'],
+        ]
+        downloads.each { name, url ->
+            def dst = luckPermsPluginDir.resolve(name).toFile()
+            if (dst.exists()) {
+                logger.lifecycle("[downloadLuckPermsPlugins] ${name} already present, skipping download")
+                return
+            }
+            logger.lifecycle("[downloadLuckPermsPlugins] ${url}")
+            dst.withOutputStream { out ->
+                new URL(url).withInputStream { inp -> out << inp }
+            }
+            logger.lifecycle("[downloadLuckPermsPlugins] ${name} \u2192 vendor/luckperms/")
+        }
+    }
+}
+
+task stageLuckPermsPlugins {
+    group = 'deployment'
+    description = 'Copies vendor/luckperms jars into config/server-templates/.'
+
+    dependsOn downloadLuckPermsPlugins
+
+    doLast {
+        def ncp = java.nio.file.StandardCopyOption.REPLACE_EXISTING
+        def templates = rootDir.toPath().resolve('config/server-templates')
+        def vendor = luckPermsPluginDir
+        def version = luckPermsVersions['version']
+        def bukkitJar = "LuckPerms-Bukkit-${version}.jar"
+        def velocityJar = "LuckPerms-Velocity-${version}.jar"
+
+        def proxyDst = templates.resolve('proxy/plugins')
+        proxyDst.toFile().mkdirs()
+        java.nio.file.Files.copy(vendor.resolve(velocityJar), proxyDst.resolve(velocityJar), ncp)
+        logger.lifecycle("[stageLuckPermsPlugins] ${velocityJar} \u2192 config/server-templates/proxy/plugins/")
+
+        ['lobby', 'extraction'].each { preset ->
+            def dst = templates.resolve("${preset}/plugins")
+            dst.toFile().mkdirs()
+            java.nio.file.Files.copy(vendor.resolve(bukkitJar), dst.resolve(bukkitJar), ncp)
+            logger.lifecycle("[stageLuckPermsPlugins] ${bukkitJar} \u2192 config/server-templates/${preset}/plugins/")
+        }
+    }
+}
+
+task stageBedrockPlugins {
+    group = 'deployment'
+    description = 'Copies vendor/bedrock-plugins jars into config/server-templates/.'
+
+    dependsOn downloadBedrockPlugins
+
+    doLast {
+        def ncp = java.nio.file.StandardCopyOption.REPLACE_EXISTING
+        def templates = rootDir.toPath().resolve('config/server-templates')
+        def vendor = bedrockPluginDir
+
+        def proxyJars = ['Geyser-Velocity.jar', 'floodgate-velocity.jar']
+        def paperJar = 'floodgate-spigot.jar'
+        def proxyDst = templates.resolve('proxy/plugins')
+        proxyDst.toFile().mkdirs()
+        proxyJars.each { name ->
+            java.nio.file.Files.copy(vendor.resolve(name), proxyDst.resolve(name), ncp)
+            logger.lifecycle("[stageBedrockPlugins] ${name} \u2192 config/server-templates/proxy/plugins/")
+        }
+        ['lobby', 'extraction'].each { preset ->
+            def dst = templates.resolve("${preset}/plugins")
+            dst.toFile().mkdirs()
+            java.nio.file.Files.copy(vendor.resolve(paperJar), dst.resolve(paperJar), ncp)
+            logger.lifecycle("[stageBedrockPlugins] ${paperJar} \u2192 config/server-templates/${preset}/plugins/")
+        }
+    }
+}
+
+task downloadFoliaJar {
+    group = 'deployment'
+    description = 'Downloads the latest Folia build for the pinned Minecraft version into vendor/folia/folia.jar.'
+
+    doLast {
+        foliaVendorDir.toFile().mkdirs()
+        def foliaVersion = rootProject.ext.foliaMinecraftVersion
+        def dst = foliaVendorDir.resolve('folia.jar').toFile()
+        def marker = foliaVendorDir.resolve('folia.version').toFile()
+        def ua = 'skypvp-network/0.1 (deployment build)'
+        def currentMarker = marker.exists() ? marker.text.trim() : ''
+        if (dst.exists() && dst.length() > 1_000_000L && currentMarker == foliaVersion) {
+            logger.lifecycle("[downloadFoliaJar] folia.jar (${foliaVersion}) already present, skipping download")
+            return
+        }
+        if (dst.exists()) {
+            logger.lifecycle("[downloadFoliaJar] replacing folia.jar (marker='${currentMarker}', want='${foliaVersion}')")
+            dst.delete()
+        }
+        // v3 fill.papermc.io API; pinned to the 1.21.11 Folia line.
+        def buildsUrl = "https://fill.papermc.io/v3/projects/folia/versions/${foliaVersion}/builds"
+        logger.lifecycle("[downloadFoliaJar] resolving latest build from ${buildsUrl}")
+        def buildsConn = new URL(buildsUrl).openConnection()
+        buildsConn.setRequestProperty('User-Agent', ua)
+        buildsConn.setRequestProperty('Accept', 'application/json')
+        def buildsJson = new groovy.json.JsonSlurper().parse(buildsConn.inputStream)
+        // v3 returns builds newest-first.
+        def latestBuildInfo = buildsJson[0]
+        def downloadUrl = latestBuildInfo.downloads['server:default'].url
+        logger.lifecycle("[downloadFoliaJar] build=${latestBuildInfo.id} ${downloadUrl}")
+        def jarConn = new URL(downloadUrl).openConnection()
+        jarConn.setRequestProperty('User-Agent', ua)
+        dst.withOutputStream { out ->
+            jarConn.inputStream.withStream { inp -> out << inp }
+        }
+        if (dst.length() < 1_000_000L) {
+            dst.delete()
+            throw new GradleException("Downloaded folia.jar looks invalid (size=${dst.length()})")
+        }
+        marker.text = foliaVersion
+        logger.lifecycle("[downloadFoliaJar] folia.jar (${foliaVersion}) → vendor/folia/")
+    }
+}
+
+task stageFoliaJar {
+    group = 'deployment'
+    description = 'Copies vendor/folia/folia.jar into config/server-templates/extraction/.'
+
+    dependsOn downloadFoliaJar
+
+    doLast {
+        def ncp = java.nio.file.StandardCopyOption.REPLACE_EXISTING
+        def src = foliaVendorDir.resolve('folia.jar')
+        if (!src.toFile().exists() || src.toFile().length() < 1_000_000L) {
+            throw new GradleException("Missing or invalid Folia jar: ${src.toAbsolutePath()}")
+        }
+        def dstDir = rootDir.toPath().resolve('config/server-templates/extraction')
+        dstDir.toFile().mkdirs()
+        java.nio.file.Files.copy(src, dstDir.resolve('folia.jar'), ncp)
+        logger.lifecycle('[stageFoliaJar] folia.jar → config/server-templates/extraction/')
+    }
+}
+
+task downloadPacketEventsPlugin {
+    group = 'deployment'
+    description = 'Downloads PacketEvents spigot jar into config/server-templates lobby and extraction plugins folders.'
+
+    doLast {
+        def version = rootProject.ext.packetEventsVersion
+        def url = "https://github.com/retrooper/packetevents/releases/download/v${version}/packetevents-spigot-${version}.jar"
+        ['lobby', 'extraction'].each { preset ->
+            def dstDir = rootDir.toPath().resolve("config/server-templates/${preset}/plugins")
+            dstDir.toFile().mkdirs()
+            def dst = dstDir.resolve("packetevents-spigot-${version}.jar").toFile()
+            if (dst.exists()) {
+                logger.lifecycle("[downloadPacketEventsPlugin] ${dst.name} already present in ${preset}, skipping")
+                return
+            }
+            logger.lifecycle("[downloadPacketEventsPlugin] ${url}")
+            dst.withOutputStream { out ->
+                new URL(url).withInputStream { inp -> out << inp }
+            }
+            logger.lifecycle("[downloadPacketEventsPlugin] ${dst.name} → config/server-templates/${preset}/plugins/")
+        }
+    }
+}
+
+task downloadWorldsPlugin {
+    group = 'deployment'
+    description = 'Downloads the TheNextLvl Worlds plugin jar into the extraction plugins folder (enables runtime world creation on Folia).'
+
+    doLast {
+        def version = rootProject.ext.worldsPluginVersion
+        def dstDir = rootDir.toPath().resolve("config/server-templates/extraction/plugins")
+        dstDir.toFile().mkdirs()
+        // Remove stale Worlds jars so we never ship two conflicting versions.
+        dstDir.toFile().listFiles()?.findAll {
+            it.isFile() && it.name ==~ /(?i)worlds-.*\.jar/ && it.name != "worlds-${version}-all.jar"
+        }?.each {
+            logger.lifecycle("[downloadWorldsPlugin] removing stale ${it.name}")
+            it.delete()
+        }
+        def dst = dstDir.resolve("worlds-${version}-all.jar").toFile()
+        if (dst.exists() && dst.length() > 100000) {
+            logger.lifecycle("[downloadWorldsPlugin] ${dst.name} already present, skipping")
+            return
+        }
+        // Resolve the Folia-compatible download URL for the pinned version from the Modrinth API
+        // (project gBIw3Gvy). The -all jar bundles the API + version-specific NMS support.
+        def apiConn = new URL('https://api.modrinth.com/v2/project/gBIw3Gvy/version').openConnection()
+        apiConn.setRequestProperty('User-Agent', 'skypvp-network/0.1 (deployment build)')
+        def releases = new groovy.json.JsonSlurper().parse(apiConn.inputStream)
+        def match = releases.find { it.version_number == version && it.loaders.contains('folia') }
+        if (match == null) {
+            throw new GradleException("No Worlds ${version} release with a 'folia' loader found on Modrinth")
+        }
+        def file = match.files.find { it.primary } ?: match.files[0]
+        def url = file.url
+        logger.lifecycle("[downloadWorldsPlugin] ${url}")
+        dst.withOutputStream { out ->
+            new URL(url).withInputStream { inp -> out << inp }
+        }
+        if (dst.length() < 100000) {
+            throw new GradleException("Downloaded worlds plugin jar looks invalid (size=${dst.length()})")
+        }
+        logger.lifecycle("[downloadWorldsPlugin] ${dst.name} \u2192 config/server-templates/extraction/plugins/")
+    }
+}
+
+task downloadSparkFoliaPlugin {
+    group = 'deployment'
+    description = 'Downloads the spark-folia plugin jar (bundled Paper spark does not run on Folia).'
+
+    doLast {
+        sparkPluginDir.toFile().mkdirs()
+        def jarName = sparkVersions['jar']
+        def url = sparkVersions['url']
+        def dst = sparkPluginDir.resolve(jarName).toFile()
+        if (dst.exists() && dst.length() > 100_000L) {
+            logger.lifecycle("[downloadSparkFoliaPlugin] ${jarName} already present, skipping download")
+            return
+        }
+        logger.lifecycle("[downloadSparkFoliaPlugin] ${url}")
+        dst.withOutputStream { out ->
+            new URL(url).withInputStream { inp -> out << inp }
+        }
+        if (dst.length() < 100_000L) {
+            dst.delete()
+            throw new GradleException("Downloaded ${jarName} looks invalid (size=${dst.length()})")
+        }
+        logger.lifecycle("[downloadSparkFoliaPlugin] ${jarName} → vendor/spark/")
+    }
+}
+
+task stageSparkFoliaPlugin {
+    group = 'deployment'
+    description = 'Copies spark-folia jar into config/server-templates/extraction/plugins/.'
+
+    dependsOn downloadSparkFoliaPlugin
+
+    doLast {
+        def ncp = java.nio.file.StandardCopyOption.REPLACE_EXISTING
+        def jarName = sparkVersions['jar']
+        def src = sparkPluginDir.resolve(jarName)
+        def dstDir = rootDir.toPath().resolve('config/server-templates/extraction/plugins')
+        dstDir.toFile().mkdirs()
+        // Remove stale spark-folia builds so only one version ships.
+        dstDir.toFile().listFiles()?.findAll {
+            it.isFile() && it.name ==~ /(?i)spark-.*-folia\.jar/ && it.name != jarName
+        }?.each {
+            logger.lifecycle("[stageSparkFoliaPlugin] removing stale ${it.name}")
+            it.delete()
+        }
+        java.nio.file.Files.copy(src, dstDir.resolve(jarName), ncp)
+        logger.lifecycle("[stageSparkFoliaPlugin] ${jarName} → config/server-templates/extraction/plugins/")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// deployJars — compiles SkyPvP modules and stages jars into server-templates.
+//
+//   ./gradlew deployJars
+//
+// Plugin YAML configs (WeaponMechanics, etc.) live under config/server-templates/
+// and are rendered into /data/runtime at container start — no per-plugin staging.
+// ---------------------------------------------------------------------------
+task deployJars {
+    group = 'deployment'
+    description = 'Builds all plugin jars and copies them into config/server-templates/.'
+
+    dependsOn ':servers:paper-core:shadowJar',
+              ':servers:paper-extraction:shadowJar',
+              ':servers:paper-lobby:shadowJar',
+              ':proxy:velocity-core:shadowJar',
+              buildForkedLimboApi,
+              stageBedrockPlugins,
+              stageLuckPermsPlugins,
+              stageFoliaJar,
+              stageSparkFoliaPlugin,
+              downloadPacketEventsPlugin,
+              downloadWorldsPlugin
+
+    doLast {
+        def templates = rootDir.toPath().resolve('config/server-templates')
+        def ncp = java.nio.file.StandardCopyOption.REPLACE_EXISTING
+
+        def coreJar       = project(':servers:paper-core').tasks.named('shadowJar').get().archiveFile.get().asFile
+        def lobbyJar      = project(':servers:paper-lobby').tasks.named('shadowJar').get().archiveFile.get().asFile
+        def extractionJar = project(':servers:paper-extraction').tasks.named('shadowJar').get().archiveFile.get().asFile
+        def proxyJar   = project(':proxy:velocity-core').tasks.named('shadowJar').get().archiveFile.get().asFile
+        def vendoredLimboJar = rootDir.toPath().resolve('vendor/limboapi-fork/plugin/build/libs/skypvp-limboapi.jar').toFile()
+        def skypvpWebPluginJar = new File('E:/Minecraft/skypvp-web/skypvp-web-plugin/build/libs/skypvp-web-plugin.jar')
+        if (!vendoredLimboJar.exists()) {
+            throw new GradleException("Vendored SkyPvP limbo jar was not built: ${vendoredLimboJar.absolutePath}")
+        }
+        if (!skypvpWebPluginJar.exists()) {
+            throw new GradleException("skypvp-web-plugin jar does not exist: ${skypvpWebPluginJar.absolutePath}")
+        }
+
+        def presetPlugins = [
+            'lobby'      : [coreJar, lobbyJar, skypvpWebPluginJar],
+            'extraction' : [coreJar, extractionJar, skypvpWebPluginJar],
+        ]
+        presetPlugins.each { preset, jars ->
+            def dst = templates.resolve("${preset}/plugins")
+            dst.toFile().mkdirs()
+            dst.toFile().listFiles()?.findAll {
+                it.isFile() && it.name ==~ /(?i)skypvp-.*\.jar/
+            }?.each {
+                if (!it.delete()) {
+                    throw new GradleException("Failed to remove stale plugin jar: ${it.absolutePath}")
+                }
+            }
+            jars.each { jar ->
+                java.nio.file.Files.copy(jar.toPath(), dst.resolve(jar.name), ncp)
+                logger.lifecycle("[deployJars] ${jar.name} \u2192 config/server-templates/${preset}/plugins/")
+            }
+        }
+
+        def proxyPlugins = templates.resolve('proxy/plugins')
+        proxyPlugins.toFile().mkdirs()
+        proxyPlugins.toFile().listFiles()?.findAll {
+            it.isFile() && it.name ==~ /(?i)skypvp-.*\.jar/
+        }?.each {
+            if (!it.delete()) {
+                throw new GradleException("Failed to remove stale plugin jar: ${it.absolutePath}")
+            }
+        }
+        java.nio.file.Files.copy(proxyJar.toPath(), proxyPlugins.resolve(proxyJar.name), ncp)
+        logger.lifecycle("[deployJars] ${proxyJar.name} \u2192 config/server-templates/proxy/plugins/")
+
+        proxyPlugins.toFile().listFiles()?.findAll {
+            it.isFile() && it.name ==~ /(?i)(limboapi|skypvp-limboapi).*\.jar/
+        }?.each {
+            if (!it.delete()) {
+                throw new GradleException("Failed to remove stale limbo jar: ${it.absolutePath}")
+            }
+        }
+        java.nio.file.Files.copy(vendoredLimboJar.toPath(), proxyPlugins.resolve(vendoredLimboJar.name), ncp)
+        logger.lifecycle("[deployJars] ${vendoredLimboJar.name} \u2192 config/server-templates/proxy/plugins/")
+
+        java.nio.file.Files.copy(skypvpWebPluginJar.toPath(), proxyPlugins.resolve(skypvpWebPluginJar.name), ncp)
+        logger.lifecycle("[deployJars] ${skypvpWebPluginJar.name} \u2192 config/server-templates/proxy/plugins/")
+
+        logger.lifecycle('[deployJars] Done. Rebuild images or restart Compose to pick up changes.')
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(rootProject.ext.javaVersion)
+        }
+        withJavadocJar()
+        withSourcesJar()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = rootProject.ext.javaVersion
+    }
+
+    // Suppress all Javadoc HTML linting — pre-existing issues in the codebase
+    // are not blocking; actual class compilation and runtime are unaffected.
+    tasks.withType(Javadoc).configureEach {
+        options.addStringOption('Xdoclint:none', '-quiet')
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+        systemProperty 'net.bytebuddy.experimental', 'true'
+    }
+}

@@ -1,0 +1,70 @@
+package net.elytrium.limboapi.api.utils;
+
+import java.util.Map;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+public abstract class OverlayMap<K, V> implements Map<K, V> {
+   protected boolean override = false;
+   protected final Map<K, V> parent;
+   protected final Map<K, V> overlay;
+
+   public OverlayMap(Map<K, V> parent, Map<K, V> overlay) {
+      this.parent = parent;
+      this.overlay = overlay;
+   }
+
+   @Override
+   public int size() {
+      return this.parent.size() + this.overlay.size();
+   }
+
+   @Override
+   public boolean isEmpty() {
+      return this.parent.isEmpty() && this.overlay.isEmpty();
+   }
+
+   @Override
+   public boolean containsKey(Object o) {
+      return this.override ? this.overlay.containsKey(o) : this.parent.containsKey(o) || this.overlay.containsKey(o);
+   }
+
+   @Override
+   public boolean containsValue(Object o) {
+      return this.override ? this.overlay.containsValue(o) : this.parent.containsValue(o) || this.overlay.containsValue(o);
+   }
+
+   @Override
+   public V get(Object o) {
+      return this.overlay.containsKey(o) ? this.overlay.get(o) : this.parent.get(o);
+   }
+
+   @Nullable
+   @Override
+   public V put(K k, V v) {
+      return this.overlay.put(k, v);
+   }
+
+   @Override
+   public V remove(Object o) {
+      return this.overlay.remove(o);
+   }
+
+   @Override
+   public void putAll(@NotNull Map<? extends K, ? extends V> map) {
+      this.overlay.putAll(map);
+   }
+
+   @Override
+   public void clear() {
+      this.overlay.clear();
+   }
+
+   public boolean isOverride() {
+      return this.override;
+   }
+
+   public void setOverride(boolean override) {
+      this.override = override;
+   }
+}

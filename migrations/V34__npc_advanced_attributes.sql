@@ -1,0 +1,5 @@
+-- V34: NPC Advanced Attributes
+ALTER TABLE network_npcs ADD COLUMN IF NOT EXISTS skin_url TEXT;
+ALTER TABLE network_npcs ADD COLUMN IF NOT EXISTS glow BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE network_npcs ADD COLUMN IF NOT EXISTS glow_color TEXT;
+ALTER TABLE network_npcs ADD COLUMN IF NOT EXISTS face_player BOOLEAN NOT NULL DEFAULT false;

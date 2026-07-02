@@ -1,0 +1,28 @@
+name: SkyPvPLobbyMode
+main: network.skypvp.lobby.LobbyModePlugin
+version: ${version}
+api-version: '1.21'
+depend:
+  - SkyPvPCore
+author: SkyPvP
+description: Lobby gamemode plugin boundary.
+commands:
+  lobbylayout:
+    description: Manage template-backed lobby spawn, navigation points, NPCs, and holograms.
+    usage: /lobbylayout [status|setspawn|setpoint|pointtp|addnpc|delnpc|addholo|delholo|apply]
+    permission: skypvp.staff
+  lobbystate:
+    description: Inspect or set lobby lifecycle state.
+    usage: /lobbystate [set <OPEN|EVENT_COUNTDOWN|EVENT_LIVE|RESTARTING>]
+    permission: skypvp.staff
+  lobbycheck:
+    description: Run a lobby runtime sanity check.
+    usage: /lobbycheck
+    permission: skypvp.staff
+  parkoursetup:
+    description: Setup a lobby parkour track.
+    usage: /parkoursetup <create|setstart|addcheckpoint|setfinish> <trackname>
+    permission: skypvp.admin.parkoursetup
+  lobbygame:
+    description: Manage your active lobby game session.
+    usage: /lobbygame <tag|hns|leave>

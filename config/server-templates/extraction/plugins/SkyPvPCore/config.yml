@@ -1,0 +1,58 @@
+server:
+  id: ${SPVP_SERVER_ID}
+  role: ${SPVP_SERVER_ROLE}
+world-state:
+  enabled: true
+  preset-id: ${SPVP_PRESET_ID}
+  preset-root: ${SPVP_PRESET_ROOT}
+redis:
+  enabled: true
+  host: ${SPVP_REDIS_HOST}
+  port: ${SPVP_REDIS_PORT}
+  password: "${SPVP_REDIS_PASSWORD}"
+  database: 0
+postgres:
+  enabled: true
+  host: ${SPVP_POSTGRES_HOST}
+  port: ${SPVP_POSTGRES_PORT}
+  database: ${SPVP_POSTGRES_DATABASE}
+  username: ${SPVP_POSTGRES_USERNAME}
+  password: "${SPVP_POSTGRES_PASSWORD}"
+chat:
+  clear-lines: 150
+  moderation:
+    enabled: ${SPVP_CHAT_MODERATION_ENABLED}
+    endpoint: "${SPVP_CHAT_MODERATION_ENDPOINT}"
+    api-key: "${SPVP_CHAT_MODERATION_API_KEY}"
+    language: eng
+    category3-threshold: 0.75
+    honor-review-recommended: true
+    content-safety-min-severity: 2
+    flags-before-warn: 2
+    warns-before-mute: 2
+    mute-duration-seconds: 3600
+  translation:
+    enabled: ${SPVP_CHAT_TRANSLATION_ENABLED}
+    endpoint: "${SPVP_CHAT_TRANSLATION_ENDPOINT}"
+    api-key: "${SPVP_CHAT_TRANSLATION_API_KEY}"
+    region: "${SPVP_CHAT_TRANSLATION_REGION}"
+  defaults:
+    rank:
+      priority: 0
+      prefix: ""
+      name_color: white
+      name: "%player_name%"
+      suffix: ""
+      chat_color: white
+    private:
+      prefix: "<#FFD700>["
+      name_color: gold
+      name: "%player_name%"
+      suffix: "<#FFD700> → %target_name%]<reset>"
+      chat_color: gray
+    party:
+      prefix: "<#55FFFF>[Party] <reset>"
+      name_color: aqua
+      name: "%player_name%"
+      suffix: ""
+      chat_color: white

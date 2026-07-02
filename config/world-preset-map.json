@@ -1,0 +1,5 @@
+{
+  "_comment": "Maps each server ID to its default world template ID. Used by sync-world-states.ps1 to populate world dirs before Paper starts. Override per-server at runtime via world-state.preset-id in config.yml.",
+  "lobby-1": "lobby-template",
+  "extraction-1": "extraction-template"
+}

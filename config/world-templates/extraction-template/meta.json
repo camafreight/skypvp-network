@@ -1,0 +1,9 @@
+{
+  "presetId": "extraction-template",
+  "description": "Extraction gamemode instance template for horizontally scaled match servers",
+  "spawnX": 0,
+  "spawnY": 100,
+  "spawnZ": 0,
+  "spawnYaw": 90,
+  "spawnPitch": 0
+}

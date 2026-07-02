@@ -1,0 +1,105 @@
+{
+  "mapId": "aether-ruins",
+  "displayName": "Aether Ruins",
+  "maxPlayers": 12,
+  "durationSeconds": 3600,
+  "spawnPoints": [
+    {
+      "id": "alpha",
+      "x": 108.5,
+      "y": 105.0,
+      "z": 277.0,
+      "yaw": 90.0,
+      "pitch": 0.0,
+      "safetyRating": 100
+    },
+    {
+      "id": "beta",
+      "x": 115.5,
+      "y": 105.0,
+      "z": 283.0,
+      "yaw": -90.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    }
+  ],
+  "extractZones": [
+    {
+      "id": "center-temple-extract",
+      "minX": 124.0,
+      "minY": 105.0,
+      "minZ": 270.0,
+      "maxX": 135.0,
+      "maxY": 114.0,
+      "maxZ": 281.0
+    }
+  ],
+  "lootChests": [
+    {
+      "id": "north-chest",
+      "x": 102,
+      "y": 105,
+      "z": 286,
+      "tier": "common"
+    },
+    {
+      "id": "center-temple-chest",
+      "x": 104,
+      "y": 105,
+      "z": 285,
+      "tier": "rare"
+    },
+    {
+      "id": "south-chest",
+      "x": 103,
+      "y": 105,
+      "z": 287,
+      "tier": "epic"
+    }
+  ],
+  "bossSpawns": [
+    {
+      "id": "ruins-wither",
+      "mythicMobId": "RuinsWither",
+      "x": 129.5,
+      "y": 108.0,
+      "z": 275.5,
+      "delaySeconds": 900,
+      "level": 1
+    }
+  ],
+  "worldGuardRegions": [
+    {
+      "id": "combat-arena",
+      "regionName": "aether_ruins_combat",
+      "flags": {
+        "pvp": "allow",
+        "mob-spawning": "deny"
+      }
+    },
+    {
+      "id": "extract-pad",
+      "regionName": "aether_ruins_extract",
+      "flags": {
+        "pvp": "deny",
+        "entry": "allow"
+      }
+    }
+  ],
+  "pointsOfInterest": [
+    {
+      "id": "temple-extract",
+      "label": "Temple Extract",
+      "x": 129.5,
+      "y": 109.5,
+      "z": 275.5
+    },
+    {
+      "id": "south-spawn",
+      "label": "South Spawn",
+      "x": 108.5,
+      "y": 105.0,
+      "z": 277.0
+    }
+  ]
+}

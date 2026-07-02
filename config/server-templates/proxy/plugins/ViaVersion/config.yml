@@ -1,0 +1,44 @@
+# ViaVersion proxy config — trimmed defaults; see upstream jar for full option list.
+# Docs: https://docs.viaversion.com
+
+check-for-updates: true
+send-supported-versions: false
+block-versions: []
+block-protocols: []
+block-disconnect-msg: "You are using an unsupported Minecraft version!"
+reload-disconnect-msg: "Server reload, please rejoin!"
+
+logging:
+  log-blocked-joins: false
+  log-entity-data-errors: true
+  log-text-component-conversion-errors: false
+  log-other-conversion-warnings: false
+  max-error-length: 1500
+
+config-version: 1
+init-config-version: 1
+migrate-default-config-changes: true
+send-player-details: true
+send-server-details: true
+
+velocity-ping-interval: 60
+velocity-ping-save: true
+velocity-servers: {}
+
+packet-limiter:
+  enabled: true
+  max-per-second: 800
+  max-per-second-kick-message: "You are sending too many packets!"
+  sustained-max-per-second: 200
+  sustained-period-seconds: 7
+  sustained-threshold: 4
+  sustained-kick-message: "You are sending too many packets, :("
+
+packet-size-limiter:
+  enabled: false
+  max-per-second: -1
+  max-per-second-kick-message: "You are sending too large packets!"
+  sustained-max-per-second: -1
+  sustained-period-seconds: 5
+  sustained-threshold: 3
+  sustained-kick-message: "You are sending too large packets, :("

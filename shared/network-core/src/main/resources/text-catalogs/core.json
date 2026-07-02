@@ -1,0 +1,23 @@
+{
+  "chat.muted": "<red>You are muted.",
+  "chat.moderation_blocked": "<red>Your message was blocked by chat moderation.",
+  "chat.private_usage": "<gray>Private chat uses <white>/msg <player> <message><gray>.",
+  "chat.staff_denied": "<red>You cannot use staff chat.",
+  "chat.party_required": "<red>You are not in a party.",
+  "chat.rate_limit": "<#FF5555>[!] <reset><#888888>Please slow down!<reset>",
+  "join.server_draining": "&cServer is restarting/draining. Please join another server.",
+  "join.vanish_alert": "<#FF5555>[VANISH] <reset><#FFFFFF>{0}<reset><#888888> connected (vanished).<reset>",
+  "command.no_permission": "<#FF5555>[!]<reset> <#888888>No permission.<reset>",
+  "proxy.limbo.chat_limited": "<#94a3b8>Chat is limited while you are held in proxy limbo.</#94a3b8> <#94a3b8>Use <#e2e8f0>/play <mode></#e2e8f0> from the live mode suggestions, or stay connected and the proxy will route you automatically.</#94a3b8>",
+  "proxy.limbo.unknown_command": "<#fbbf24>Unknown limbo command.</#fbbf24> <#94a3b8>Try <#e2e8f0>/play lobby</#e2e8f0>, <#e2e8f0>/play extraction</#e2e8f0>, or <#e2e8f0>/queue status</#e2e8f0>.</#94a3b8>",
+  "gui.feature": "Feature",
+  "gui.enabled": "Enabled",
+  "gui.disabled": "Disabled",
+  "gui.loading": "Loading...",
+  "gui.back": "Back",
+  "gui.close": "Close",
+  "gui.confirm": "Confirm",
+  "gui.cancel": "Cancel",
+  "social.auto_translate": "Auto-translate",
+  "social.auto_translate_desc": "Translate chat into your client language."
+}

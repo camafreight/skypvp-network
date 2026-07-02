@@ -1,0 +1,65 @@
+{
+  "namespace": "skypvp-network",
+  "gameNodes": {
+    "lobby": "node-1",
+    "extraction": "skypvp-node-2"
+  },
+  "modes": [
+    {
+      "id": "lobby",
+      "displayName": "Lobby",
+      "statefulSet": "skypvp-lobby",
+      "serviceName": "skypvp-lobby",
+      "serverRole": "LOBBY",
+      "presetId": "lobby-template",
+      "image": "ghcr.io/skypvp/paper-core:lobby-local",
+      "defaultReplicas": 1,
+      "maxReplicas": 4,
+      "gameNode": "node-1",
+      "javaMin": "2G",
+      "javaMax": "4G",
+      "cpuRequest": "1",
+      "cpuLimit": "4",
+      "memoryRequest": "3Gi",
+      "memoryLimit": "6Gi",
+      "bedrockPort": true,
+      "worldStorage": "emptyDir"
+    },
+    {
+      "id": "extraction",
+      "displayName": "Extraction",
+      "statefulSet": "skypvp-extraction",
+      "serviceName": "skypvp-extraction",
+      "serverRole": "EXTRACTION",
+      "presetId": "extraction-template",
+      "image": "ghcr.io/skypvp/paper-core:extraction-local",
+      "folia": true,
+      "serverJar": "folia.jar",
+      "defaultReplicas": 1,
+      "maxReplicas": 8,
+      "gameNode": "skypvp-node-2",
+      "javaMin": "8G",
+      "javaMax": "16G",
+      "cpuRequest": "2",
+      "cpuLimit": "8",
+      "memoryRequest": "10Gi",
+      "memoryLimit": "18Gi",
+      "bedrockPort": false,
+      "worldStorage": "emptyDir"
+    }
+  ],
+  "retired": {
+    "statefulSets": [
+      "skypvp-minigame",
+      "skypvp-survival"
+    ],
+    "services": [
+      "minigame-1",
+      "survival-1",
+      "skypvp-minigame-staging"
+    ],
+    "stagingStatefulSets": [
+      "skypvp-minigame-staging"
+    ]
+  }
+}

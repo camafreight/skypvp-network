@@ -1,0 +1,6 @@
+# Deployed breach map registry (plugin data folder). Keep in sync with config/breach-maps.yml
+maps:
+  aether-ruins:
+    map-id: aether-ruins
+    template: aether-ruins
+    enabled: true

@@ -1,0 +1,33 @@
+# ViaBackwards proxy config — trimmed defaults; see upstream jar for full option list.
+
+always-show-original-mob-name: true
+add-custom-enchants-into-lore: true
+add-teamcolor-to-prefix: true
+fix-1_13-face-player: false
+fix-formatted-inventory-titles: true
+handle-pings-as-inv-acknowledgements: false
+bedrock-at-y-0: false
+sculk-shriekers-to-crying-obsidian: true
+scaffolding-to-water: false
+map-darkness-effect: true
+map-custom-model-data: true
+map-display-entities: true
+suppress-emulation-warnings: false
+dialogs-via-chests: true
+code-of-conduct-as-dialog: true
+pass-original-item-name-to-resource-packs: true
+
+dialog-style:
+  page-navigation-title: "&9&lPage navigation"
+  page-navigation-next: "&9Left click: &6Go to next page"
+  page-navigation-previous: "&9Right click: &6Go to previous page"
+  toggle-value: "&9Left click: &6Toggle value"
+  increase-value: "&9Left click: &6Increase value by %s"
+  decrease-value: "&9Right click: &6Decrease value by %s"
+  value-range: "&7(Value between &a%s &7and &a%s&7)"
+  current-value: "&7Current value: &a%s"
+  edit-value: "&9Left click: &6Edit text"
+  next-option: "&9Left click: &6Go to next option"
+  previous-option: "&9Right click: &6Go to previous option"
+  set-text: "&9Left click/close: &6Set text"
+  close: "&9Left click: &6Close"

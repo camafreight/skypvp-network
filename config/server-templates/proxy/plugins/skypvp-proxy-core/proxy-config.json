@@ -1,0 +1,20 @@
+{
+  "networkName": "SkyPvP Network",
+  "redis": {
+    "host": "${SPVP_REDIS_HOST}",
+    "port": ${SPVP_REDIS_PORT},
+    "password": "${SPVP_REDIS_PASSWORD}"
+  },
+  "postgres": {
+    "enabled": true,
+    "host": "${SPVP_POSTGRES_HOST}",
+    "port": ${SPVP_POSTGRES_PORT},
+    "database": "skypvp_network",
+    "username": "skypvp",
+    "password": "${SPVP_POSTGRES_PASSWORD}"
+  },
+  "redisEnabled": true,
+  "sessionChannel": "skypvp:network:players",
+  "heartbeatChannel": "skypvp:network:heartbeats",
+  "rankChannel": "skypvp:network:ranks"
+}

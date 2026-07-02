@@ -1,0 +1,41 @@
+plugins {
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+repositories {
+    maven { url = 'https://mvn.lumine.io/repository/maven-public/' }
+    maven { url = 'https://repo.thenextlvl.net/releases' }
+}
+
+dependencies {
+    compileOnly project(':shared:network-core')
+    compileOnly project(':servers:paper-gamemode-api')
+    compileOnly project(':servers:paper-core')
+    compileOnly "io.papermc.paper:paper-api:${rootProject.ext.paperApiVersion}"
+    compileOnly "com.github.retrooper:packetevents-spigot:${rootProject.ext.packetEventsVersion}"
+    compileOnly "com.google.code.gson:gson:${rootProject.ext.gsonVersion}"
+    compileOnly "me.clip:placeholderapi:${rootProject.ext.placeholderApiVersion}"
+    compileOnly 'io.lumine:Mythic-Dist:5.6.1'
+    // TheNextLvl Worlds API — enables runtime world creation/loading on Folia
+    // (stock Folia forbids Bukkit.createWorld). Provided at runtime by the Worlds plugin.
+    compileOnly "net.thenextlvl:worlds:${rootProject.ext.worldsApiVersion}"
+}
+
+processResources {
+    filesMatching('plugin.yml') {
+        expand(version: project.version)
+    }
+}
+
+jar {
+    archiveClassifier = 'thin'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    archiveFileName = 'skypvp-extraction-mode.jar'
+}
+
+build {
+    dependsOn shadowJar
+}

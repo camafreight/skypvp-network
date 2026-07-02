@@ -1,0 +1,9 @@
+{
+  "presetId": "lobby-template",
+  "description": "Primary lobby template for dynamic hub servers",
+  "spawnX": 0,
+  "spawnY": 99,
+  "spawnZ": 0,
+  "spawnYaw": 180,
+  "spawnPitch": 0
+}

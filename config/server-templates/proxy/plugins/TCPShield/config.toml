@@ -1,0 +1,11 @@
+# TCPShield (RealIP) config for Velocity proxies.
+# Requires TCPShield network in front of the proxy for Java when only-allow-proxy-connections=true.
+# Without the TCPShield Bedrock/Geyser tunnel plan, set SPVP_DISABLE_TCPSHIELD=true and connect
+# Bedrock directly to UDP 19132 (LoadBalancer IP). The plugin breaks Geyser even on local IP.
+
+only-allow-proxy-connections = ${SPVP_TCPSHIELD_ONLY_ALLOW_PROXY}
+
+timestamp-validation = 'htpdate'
+debug-mode = false
+enable-geyser-support = ${SPVP_TCPSHIELD_GEYSER_SUPPORT}
+pre-login-event = true

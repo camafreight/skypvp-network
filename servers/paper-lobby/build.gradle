@@ -1,0 +1,29 @@
+plugins {
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+dependencies {
+    compileOnly project(':shared:network-core')
+    compileOnly project(':servers:paper-gamemode-api')
+    compileOnly project(':servers:paper-core')
+    compileOnly "io.papermc.paper:paper-api:${rootProject.ext.paperApiVersion}"
+}
+
+processResources {
+    filesMatching('plugin.yml') {
+        expand(version: project.version)
+    }
+}
+
+jar {
+    archiveClassifier = 'thin'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    archiveFileName = 'skypvp-lobby-mode.jar'
+}
+
+build {
+    dependsOn shadowJar
+}

@@ -1,0 +1,35 @@
+version: "1.1.27-SNAPSHOT (git-skypvp"
+serializer: LEGACY_AMPERSAND
+prefix: "SKYPVP &6>>&f"
+
+main:
+  check-for-updates: true
+  max-chat-message-length: 256
+  max-brand-name-length: 64
+  max-unknown-packet-length: 2048
+  max-single-generic-packet-length: 4096
+  max-multi-generic-packet-length: 131072
+  max-packet-length-to-suppress-it: 512
+  discard-compression-on-login: false
+  discard-compression-after-login: false
+  save-uncompressed-packets: true
+  compatibility-mode: true
+  logging-enabled: true
+  prepare-min-version: "1_7_2"
+  prepare-max-version: "LATEST"
+  pre-limbo-profile-request-plugins:
+    - "floodgate"
+    - "geyser"
+  reduced-debug-info: false
+  send-enforce-secure-chat: true
+  view-distance: 10
+  simulation-distance: 9
+  chunk-radius-send-on-spawn: 2
+  chunks-per-tick: 16
+  chat-session-packet-timeout: 5000
+  force-disable-modern-chat-signing: true
+  messages:
+    too-big-packet: "{PRFX}{NL}{NL}&cYour client sent too big packet!"
+    invalid-ping: "{PRFX}{NL}{NL}&cYour client sent invalid ping packet!"
+    invalid-switch: "{PRFX}{NL}{NL}&cYour client sent an unexpected state switching packet!"
+    time-out: "{PRFX}{NL}{NL}Timed out."

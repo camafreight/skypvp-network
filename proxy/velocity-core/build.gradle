@@ -1,0 +1,40 @@
+plugins {
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+repositories {
+    maven {
+        name = 'elytrium-repo'
+        url = 'https://maven.elytrium.net/repo/'
+    }
+}
+
+dependencies {
+    implementation project(':shared:network-core')
+    compileOnly project(':proxy:limboapi-api')
+    implementation "com.google.code.gson:gson:${rootProject.ext.gsonVersion}"
+    implementation "com.zaxxer:HikariCP:${rootProject.ext.hikariVersion}"
+    implementation 'org.postgresql:postgresql:42.7.4'
+    implementation 'io.fabric8:kubernetes-client:6.13.4'
+
+    compileOnly "com.velocitypowered:velocity-api:${rootProject.ext.velocityApiVersion}"
+    compileOnly "net.luckperms:api:${rootProject.ext.luckPermsApiVersion}"
+    compileOnly "org.slf4j:slf4j-api:${rootProject.ext.slf4jVersion}"
+    annotationProcessor "com.velocitypowered:velocity-api:${rootProject.ext.velocityApiVersion}"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation "com.velocitypowered:velocity-api:${rootProject.ext.velocityApiVersion}"
+}
+
+jar {
+    archiveClassifier = 'thin'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    archiveFileName = 'skypvp-velocity-core.jar'
+}
+
+build {
+    dependsOn shadowJar
+}

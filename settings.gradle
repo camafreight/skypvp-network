@@ -1,0 +1,14 @@
+plugins {
+	id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
+rootProject.name = 'skypvp-network'
+
+include 'shared:network-core'
+include 'proxy:limboapi-api'
+include 'proxy:velocity-core'
+include 'vendor:limboapi-fork:plugin'
+include 'servers:paper-core'
+include 'servers:paper-gamemode-api'
+include 'servers:paper-lobby'
+include 'servers:paper-extraction'

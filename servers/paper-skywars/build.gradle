@@ -1,0 +1,27 @@
+plugins {
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+dependencies {
+    implementation project(':shared:network-core')
+    implementation project(':servers:paper-gamemode-api')
+    compileOnly "io.papermc.paper:paper-api:${rootProject.ext.paperApiVersion}"
+}
+
+processResources {
+    filesMatching('plugin.yml') {
+        expand(version: project.version)
+    }
+}
+
+jar {
+    archiveClassifier = 'thin'
+}
+
+shadowJar {
+    archiveClassifier = ''
+}
+
+build {
+    dependsOn shadowJar
+}

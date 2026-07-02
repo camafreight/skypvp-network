@@ -1,0 +1,15 @@
+server:
+  id: lobby-1
+  role: LOBBY
+network:
+  redis-channel: skypvp:network:global
+  heartbeat-channel: skypvp:network:heartbeats
+  rank-channel: skypvp:network:ranks
+  heartbeat-interval-ticks: 200
+  sql-schema: skypvp_network
+redis:
+  enabled: false
+  host: 127.0.0.1
+  port: 6379
+  password: ""
+  database: 0

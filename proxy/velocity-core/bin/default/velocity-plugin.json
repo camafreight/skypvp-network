@@ -1,0 +1,1 @@
+{"id":"skypvp-proxy-core","name":"SkyPvP Proxy Core","version":"0.1.0-SNAPSHOT","description":"Core Velocity services for the SkyPvP network","authors":["SkyPvP"],"dependencies":[{"id":"skypvp-limbo","optional":true},{"id":"luckperms","optional":true}],"main":"network.skypvp.proxy.ProxyBootstrap"}

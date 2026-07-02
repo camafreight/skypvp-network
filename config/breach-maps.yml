@@ -1,0 +1,7 @@
+# Canonical breach map registry (maps-file in breach.yml).
+# Each entry maps to config/map-templates/<template>/meta.json (+ world/ folder).
+maps:
+  aether-ruins:
+    map-id: aether-ruins
+    template: aether-ruins
+    enabled: true

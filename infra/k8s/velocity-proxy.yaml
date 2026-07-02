@@ -1,0 +1,185 @@
+# Proxy entrypoint is baked into the velocity-proxy image at /opt/skypvp/entrypoint.sh.
+# Plugin configs live in config/server-templates/proxy/ and are rendered at container start.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: skypvp-proxy
+  namespace: skypvp-network
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: skypvp-proxy-dynamic-test
+  namespace: skypvp-network
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "statefulsets/scale"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: skypvp-proxy-dynamic-test
+  namespace: skypvp-network
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: skypvp-proxy-dynamic-test
+subjects:
+  - kind: ServiceAccount
+    name: skypvp-proxy
+    namespace: skypvp-network
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skypvp-proxy
+  namespace: skypvp-network
+  labels:
+    app: skypvp-proxy
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: skypvp-proxy
+  template:
+    metadata:
+      labels:
+        app: skypvp-proxy
+    spec:
+      serviceAccountName: skypvp-proxy
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: velocity
+          image: ghcr.io/skypvp/velocity-proxy:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - /opt/skypvp/entrypoint.sh
+          ports:
+            - containerPort: 25565
+              name: minecraft
+          env:
+            - name: SPVP_REDIS_HOST
+              value: redis
+            - name: SPVP_REDIS_PORT
+              value: "6379"
+            - name: SPVP_POSTGRES_HOST
+              value: postgres
+            - name: SPVP_POSTGRES_PORT
+              value: "5432"
+            - name: SPVP_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: REDIS_PASSWORD
+                  optional: true
+            - name: SPVP_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: POSTGRES_PASSWORD
+            - name: SPVP_IN_GAME_PLUGIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: IN_GAME_PLUGIN_SECRET
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_ENABLED
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_ENDPOINT
+                  optional: true
+            - name: SPVP_CHAT_MODERATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_MODERATION_API_KEY
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_ENABLED
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_ENDPOINT
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_API_KEY
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_REGION
+                  optional: true
+            - name: SPVP_CHAT_TRANSLATION_DEBUG
+              valueFrom:
+                secretKeyRef:
+                  name: skypvp-network-env
+                  key: CHAT_TRANSLATION_DEBUG
+                  optional: true
+            # Without TCPShield Bedrock tunnel plan, the RealIP plugin blocks direct/local
+            # connections and breaks Geyser handshakes. Remove when routing Java-only via
+            # TCPShield network and using direct UDP 19132 for Bedrock.
+            - name: SPVP_DISABLE_TCPSHIELD
+              value: "true"
+          readinessProbe:
+            tcpSocket:
+              port: minecraft
+            periodSeconds: 5
+            failureThreshold: 6
+          startupProbe:
+            tcpSocket:
+              port: minecraft
+            periodSeconds: 5
+            failureThreshold: 24
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: skypvp-proxy
+  namespace: skypvp-network
+spec:
+  type: LoadBalancer
+  selector:
+    app: skypvp-proxy
+  ports:
+    - name: minecraft
+      port: 25565
+      targetPort: 25565
+      protocol: TCP
+    - name: bedrock
+      port: 19132
+      targetPort: 19132
+      protocol: UDP

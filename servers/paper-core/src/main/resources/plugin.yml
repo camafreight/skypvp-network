@@ -1,0 +1,124 @@
+name: SkyPvPCore
+main: network.skypvp.paper.PaperCorePlugin
+version: ${version}
+folia-supported: true
+load: STARTUP
+api-version: '1.21'
+softdepend:
+  - LuckPerms
+  - PlaceholderAPI
+  - packetevents
+authors:
+  - SkyPvP
+description: Core Paper services for the SkyPvP network.
+commands:
+  skypvp:
+    description: Show local SkyPvP server status.
+    usage: /skypvp
+  vanish:
+    description: Toggle vanish mode (staff only).
+    usage: /vanish
+    aliases: [v, invis]
+    permission: skypvp.staff
+  npc:
+    description: Manage persistent NPCs on this server (staff only).
+    usage: /npc <create|delete|list|action|reload>
+    permission: skypvp.staff
+
+  ignore:
+    description: Toggle ignoring private messages from a player.
+    usage: /ignore <player>
+  ignorelist:
+    description: Show your current ignore list.
+    usage: /ignorelist
+  chat:
+    description: Manage chat channels, formats, and moderation settings.
+    usage: /chat [toggle|status|channels|clear|formats|private|party|help]
+    aliases: [ch]
+  currency:
+    description: Manage or view dynamic currencies.
+    usage: /currency [list [player] | add|set|take <player> <currency> <amount>]
+    aliases: [currencies]
+  network:
+    description: Display network and server information.
+    usage: /network
+    aliases: [lf, lfinfo]
+  hub:
+    description: Queue a return trip to the network lobby.
+    usage: /hub
+
+  worldstate:
+    description: Inspect or reset template-backed world state.
+    usage: /worldstate [status|reset]
+    aliases: [wstate]
+    permission: skypvp.staff
+
+  lifecycle:
+    description: Manage scheduled server rotation and restart lifecycle.
+    usage: /lifecycle <status|arm|disarm|restartnow>
+    permission: skypvp.staff
+  lag:
+    description: Show live performance telemetry and lag history.
+    usage: /lag [status|events|clear]
+    aliases: [perf]
+    permission: skypvp.staff
+  tps:
+    description: Show current server TPS and MSPT.
+    usage: /tps
+    permission: ""
+  hologram:
+    description: Manage persistent holograms on this server.
+    usage: /hologram <create|delete|list|action|addline|removeline|reload>
+    permission: skypvp.staff
+    aliases: [holo]
+  nametag:
+    description: Edit the player nametag layout rendered above heads.
+    usage: /nametag <line|scope|list|offset|spacing|scale|refresh|background|hidevanilla|self|toggle|sample|reload>
+    permission: skypvp.staff
+    aliases: [nametags]
+permissions:
+  skypvp.chat.admin:
+    description: Full access to all chat commands, tab completion, and rank formats.
+    default: op
+    children:
+      skypvp.chat.use: true
+      skypvp.chat.clear: true
+      skypvp.chat.formats.manage: true
+      skypvp.chat.private.manage: true
+      skypvp.chat.party.manage: true
+      skypvp.chat.staff.manage: true
+      skypvp.chat.moderation.bypass: true
+      skypvp.chat.help.admin: true
+      skypvp.chat.tab.complete: true
+      skypvp.chat.channel.all: true
+      skypvp.chat.channel.party: true
+      skypvp.chat.channel.private: true
+      skypvp.chat.channel.staff: true
+      skypvp.chat.format.*: true
+  skypvp.chat.use:
+    default: true
+  skypvp.chat.channel.all:
+    default: true
+  skypvp.chat.channel.party:
+    default: true
+  skypvp.chat.tab.complete:
+    default: op
+  skypvp.chat.clear:
+    default: op
+  skypvp.chat.formats.manage:
+    default: op
+  skypvp.chat.private.manage:
+    default: op
+  skypvp.chat.party.manage:
+    default: op
+  skypvp.chat.staff.manage:
+    default: op
+  skypvp.chat.moderation.bypass:
+    description: Bypass Azure chat moderation and mute enforcement for public and private chat.
+    default: false
+  skypvp.chat.help.admin:
+    default: op
+  skypvp.chat.channel.staff:
+    default: op
+  skypvp.chat.channel.private:
+    default: true

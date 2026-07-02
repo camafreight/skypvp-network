@@ -1,0 +1,24 @@
+# Rendered from server-templates at container start.
+# LuckPerms owns permission tables in skypvp_network (legacy network_ranks is unused).
+server: ${SPVP_SERVER_ID}
+storage-method: postgresql
+
+data:
+  address: ${SPVP_POSTGRES_HOST}:${SPVP_POSTGRES_PORT}
+  database: skypvp_network
+  username: skypvp
+  password: "${SPVP_POSTGRES_PASSWORD}"
+
+  pool-settings:
+    maximum-pool-size: 10
+    minimum-idle: 10
+    maximum-lifetime: 1800000
+    keepalive-time: 0
+    connection-timeout: 5000
+
+messaging-service: redis
+
+redis:
+  enabled: true
+  address: ${SPVP_REDIS_HOST}:${SPVP_REDIS_PORT}
+  password: "${SPVP_REDIS_PASSWORD}"

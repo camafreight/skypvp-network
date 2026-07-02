@@ -1,0 +1,9 @@
+dependencies {
+    compileOnlyApi "net.kyori:adventure-api:${rootProject.ext.adventureVersion}"
+    compileOnlyApi "net.kyori:adventure-text-minimessage:${rootProject.ext.adventureVersion}"
+    compileOnlyApi "net.kyori:adventure-text-serializer-legacy:${rootProject.ext.adventureVersion}"
+    api "com.google.code.gson:gson:${rootProject.ext.gsonVersion}"
+    api "redis.clients:jedis:${rootProject.ext.jedisVersion}"
+    api "com.zaxxer:HikariCP:5.1.0"
+    api "org.postgresql:postgresql:42.7.2"
+}

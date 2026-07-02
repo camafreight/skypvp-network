@@ -1,0 +1,67 @@
+{
+  "networkName": "SkyPvP Network",
+  "externalAddress": "play.skypvp.local",
+  "fallbackServer": "",
+  "requireHeartbeatForRouting": true,
+  "redisEnabled": true,
+  "sessionChannel": "skypvp:network:players",
+  "heartbeatChannel": "skypvp:network:heartbeats",
+  "rankChannel": "skypvp:network:ranks",
+  "queueChannel": "skypvp:network:queues",
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "password": "",
+    "database": 0
+  },
+  "postgres": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 5432,
+    "database": "skypvp_network",
+    "username": "skypvp",
+    "password": "change-me"
+  },
+  "versionCompatibility": {
+    "enforceServerGates": true,
+    "latestJavaVersionLabel": "1.21.11",
+    "latestJavaProtocol": -1,
+    "latestOnlyRoles": ["SURVIVAL"],
+    "latestOnlyClusters": ["survival", "smp"],
+    "latestOnlyDenyMessage": "<gradient:#FFB300:#FF6F00><bold>SkyPvP</bold></gradient> <red>This mode requires Minecraft Java {requiredVersion}. You can still play in the lobby on your current version.</red>"
+  },
+  "limbo": {
+    "enabled": true,
+    "initialQueueKey": "network-initial",
+    "statusRefreshMillis": 1000,
+    "readTimeoutMillis": 30000,
+    "worldTime": 6000,
+    "spawnX": 0.5,
+    "spawnY": 66.0,
+    "spawnZ": 0.5,
+    "spawnYaw": 0.0,
+    "spawnPitch": 0.0,
+    "platformRadius": 5,
+    "platformY": 64,
+    "platformLightLevel": 15,
+    "holdPlayersDuringMaintenance": true,
+    "holdPlayersWhenNoInitialServer": true,
+    "evacuatePlayersDuringMaintenance": true,
+    "evacuatePlayersFromUnhealthyServers": true
+  },
+  "backendServers": [
+    {
+      "serverId": "survival-1",
+      "role": "SURVIVAL",
+      "cluster": "survival",
+      "softCapacity": 250,
+      "fallbackEligible": false
+    }
+  ],
+  "announcements": [
+    "<gradient:#FFB300:#FF6F00><bold>SkyPvP Network</bold></gradient> <#aaaaaa>— visit <#FFB300>store.skypvp.local<#aaaaaa> to support us!<reset>",
+    "<gradient:#FFB300:#FF6F00><bold>SkyPvP Network</bold></gradient> <#aaaaaa>— report bugs at <#FFB300>discord.gg/skypvp<#aaaaaa>!<reset>",
+    "<gradient:#FFB300:#FF6F00><bold>Tip:</bold></gradient> <#aaaaaa>Use <#FFB300>/hub<#aaaaaa> to return to the lobby at any time.<reset>"
+  ],
+  "announcementIntervalSeconds": 180
+}

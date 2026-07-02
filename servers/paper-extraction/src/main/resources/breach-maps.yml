@@ -1,0 +1,6 @@
+# Registered breach maps. Each entry points to config/map-templates/<template>/meta.json
+maps:
+  aether-ruins:
+    map-id: aether-ruins
+    template: aether-ruins
+    enabled: true

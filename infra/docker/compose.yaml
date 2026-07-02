@@ -1,0 +1,112 @@
+# SkyPvP Network — Minecraft-only Docker Compose stack
+#
+# HOW TO USE:
+#   1. After any Java code change, run:  ./gradlew deployJars
+#   2. Restart the stack (or individual containers) to re-render server-templates.
+#
+# Server files live in config/server-templates/<preset>/ and are rendered into
+# /data/runtime at container start. Worlds are seeded from config/world-templates/.
+#
+# Redis and PostgreSQL come from the separate skypvp-web stack via host.docker.internal.
+#
+# Optional chat moderation (Azure Content Moderator) — set in shell or a .env file next to this compose file:
+#   SPVP_CHAT_MODERATION_ENABLED=true
+#   SPVP_CHAT_MODERATION_ENDPOINT=https://<region>.api.cognitive.microsoft.com
+#   SPVP_CHAT_MODERATION_API_KEY=<subscription-key>
+
+x-paper-env: &paper-env
+  SPVP_PRESET_ROOT: /opt/skypvp/world-templates
+  SPVP_REDIS_HOST: ${SPVP_REDIS_HOST:-host.docker.internal}
+  SPVP_REDIS_PORT: ${SPVP_REDIS_PORT:-6379}
+  SPVP_REDIS_PASSWORD: ${SPVP_REDIS_PASSWORD:-}
+  SPVP_POSTGRES_HOST: ${SPVP_POSTGRES_HOST:-host.docker.internal}
+  SPVP_POSTGRES_PORT: ${SPVP_POSTGRES_PORT:-5432}
+  SPVP_POSTGRES_DATABASE: ${SPVP_POSTGRES_DATABASE:-skypvp_network}
+  SPVP_POSTGRES_USERNAME: ${SPVP_POSTGRES_USERNAME:-skypvp}
+  SPVP_POSTGRES_PASSWORD: ${SPVP_POSTGRES_PASSWORD:-change-me}
+  SPVP_IN_GAME_PLUGIN_SECRET: ${SPVP_IN_GAME_PLUGIN_SECRET:-super-secret-change-me}
+  SPVP_CHAT_MODERATION_ENABLED: ${SPVP_CHAT_MODERATION_ENABLED:-false}
+  SPVP_CHAT_MODERATION_ENDPOINT: ${SPVP_CHAT_MODERATION_ENDPOINT:-}
+  SPVP_CHAT_MODERATION_API_KEY: ${SPVP_CHAT_MODERATION_API_KEY:-}
+  SPVP_CHAT_TRANSLATION_ENABLED: ${SPVP_CHAT_TRANSLATION_ENABLED:-false}
+  SPVP_CHAT_TRANSLATION_ENDPOINT: ${SPVP_CHAT_TRANSLATION_ENDPOINT:-}
+  SPVP_CHAT_TRANSLATION_API_KEY: ${SPVP_CHAT_TRANSLATION_API_KEY:-}
+  SPVP_CHAT_TRANSLATION_REGION: ${SPVP_CHAT_TRANSLATION_REGION:-}
+  SPVP_CHAT_TRANSLATION_DEBUG: ${SPVP_CHAT_TRANSLATION_DEBUG:-false}
+
+services:
+
+  lobby-1:
+    image: eclipse-temurin:25-jre
+    container_name: skypvp-lobby-1
+    working_dir: /data/runtime
+    command: ["/bin/sh", "/opt/skypvp/entrypoint.sh"]
+    environment:
+      <<: *paper-env
+      SPVP_SERVER_ID: lobby-1
+      SPVP_SERVER_ROLE: LOBBY
+      SPVP_PRESET_ID: lobby-template
+      SPVP_ADVERTISED_HOST: lobby-1
+      SPVP_ADVERTISED_PORT: "25565"
+      SPVP_JAVA_MIN: 512M
+      SPVP_JAVA_MAX: 1536M
+    mem_limit: 2g
+    volumes:
+      - ../../config/world-templates:/opt/skypvp/world-templates:ro
+      - ../../config/server-templates/lobby:/opt/skypvp/server-template:ro
+      - ../../config/floodgate/key.pem:/opt/skypvp/floodgate-key/key.pem:ro
+      - ../../infra/scripts/paper-entrypoint.sh:/opt/skypvp/entrypoint.sh:ro
+      - ../../infra/scripts/lib/render-server-templates.sh:/opt/skypvp/lib/render-server-templates.sh:ro
+      - ../../infra/scripts/lib/install-floodgate-key.sh:/opt/skypvp/lib/install-floodgate-key.sh:ro
+    restart: unless-stopped
+
+  extraction-1:
+    image: eclipse-temurin:25-jre
+    container_name: skypvp-extraction-1
+    working_dir: /data/runtime
+    command: ["/bin/sh", "/opt/skypvp/entrypoint.sh"]
+    environment:
+      <<: *paper-env
+      SPVP_SERVER_ID: extraction-1
+      SPVP_SERVER_ROLE: EXTRACTION
+      SPVP_PRESET_ID: extraction-template
+      SPVP_ADVERTISED_HOST: extraction-1
+      SPVP_ADVERTISED_PORT: "25565"
+      SPVP_JAVA_MIN: 1G
+      SPVP_JAVA_MAX: 2G
+    mem_limit: 3g
+    volumes:
+      - ../../config/world-templates:/opt/skypvp/world-templates:ro
+      - ../../config/server-templates/extraction:/opt/skypvp/server-template:ro
+      - ../../config/floodgate/key.pem:/opt/skypvp/floodgate-key/key.pem:ro
+      - ../../infra/scripts/paper-entrypoint.sh:/opt/skypvp/entrypoint.sh:ro
+      - ../../infra/scripts/lib/render-server-templates.sh:/opt/skypvp/lib/render-server-templates.sh:ro
+      - ../../infra/scripts/lib/install-floodgate-key.sh:/opt/skypvp/lib/install-floodgate-key.sh:ro
+    restart: unless-stopped
+
+  proxy:
+    image: eclipse-temurin:25-jre
+    container_name: skypvp-proxy
+    working_dir: /data/runtime
+    command: ["/bin/sh", "/opt/skypvp/entrypoint.sh"]
+    environment:
+      SPVP_PROXY_JAVA_OPTS: ${SPVP_PROXY_JAVA_OPTS:-}
+      SPVP_DISABLE_TCPSHIELD: "true"
+      SPVP_REDIS_HOST: ${SPVP_REDIS_HOST:-host.docker.internal}
+      SPVP_POSTGRES_HOST: ${SPVP_POSTGRES_HOST:-host.docker.internal}
+    mem_limit: 1g
+    ports:
+      - "25565:25565"
+      - "19132:19132/udp"
+    volumes:
+      - ../../config/server-templates/proxy:/opt/skypvp/server-template:ro
+      - ../../config/floodgate/key.pem:/opt/skypvp/floodgate-key/key.pem:ro
+      - ../../infra/scripts/proxy-entrypoint.sh:/opt/skypvp/entrypoint.sh:ro
+      - ../../infra/scripts/lib/render-server-templates.sh:/opt/skypvp/lib/render-server-templates.sh:ro
+      - ../../infra/scripts/lib/install-floodgate-key.sh:/opt/skypvp/lib/install-floodgate-key.sh:ro
+    depends_on:
+      lobby-1:
+        condition: service_started
+      extraction-1:
+        condition: service_started
+    restart: unless-stopped

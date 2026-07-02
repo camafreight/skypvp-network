@@ -1,0 +1,22 @@
+backend-url: "${SPVP_WEB_BACKEND_URL}"
+in-game-plugin-secret: "${SPVP_IN_GAME_PLUGIN_SECRET}"
+redis-url: "${SPVP_REDIS_URL}"
+server-id: "${SPVP_SERVER_ID}"
+
+channels:
+  store-events: "skypvp:store:purchases"
+  vote-events: "skypvp:vote:events"
+  store-ack: "skypvp:store:fulfillment:acks"
+  vote-ack: "skypvp:vote:fulfillment:acks"
+  plugin-heartbeats: "skypvp:plugin:heartbeats"
+  route-prefix: "skypvp:fulfillment:route:"
+  paper-ack-prefix: "skypvp:fulfillment:paper-acks:"
+  player-locations: "skypvp:player-locations"
+  proxy-heartbeats: "skypvp:proxy:heartbeats"
+
+fulfillment:
+  enabled: true
+  mode: "coordinated-paper"
+  primary-server: "paper-local"
+  lock-ttl-seconds: 60
+  reconnect-delay-seconds: 5

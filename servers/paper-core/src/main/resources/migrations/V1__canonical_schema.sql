@@ -1,0 +1,2 @@
+-- Paper-core baseline: shared network schema is owned by skypvp-web migrations.
+-- This migration is intentionally empty; paper plugins only add feature tables in V2+.
