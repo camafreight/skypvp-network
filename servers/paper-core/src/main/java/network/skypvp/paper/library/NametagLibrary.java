@@ -464,9 +464,15 @@ public final class NametagLibrary implements Listener {
                ? 20.0
                : player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue())))
          .replace("%food%", String.valueOf(player.getFoodLevel()))
-         .replace("%level%", String.valueOf(player.getLevel()))
+         .replace("%level%", String.valueOf(this.customLevel(player)))
          .replace("%world%", player.getWorld().getName())
          .replace("%ping%", String.valueOf(player.getPing()));
+   }
+
+   /** Network level (the vanilla level is pinned to 0 as a display; see PlayerLevelService). */
+   private int customLevel(Player player) {
+      network.skypvp.paper.service.PlayerLevelService levels = this.plugin.playerLevelService();
+      return levels == null ? player.getLevel() : levels.level(player.getUniqueId());
    }
 
    private String applyTextAnimation(TextAnimation animation, String text, long tick) {

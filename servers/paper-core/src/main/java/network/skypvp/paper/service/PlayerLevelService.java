@@ -12,7 +12,6 @@ import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.title.Title;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.repository.PlayerLevelRepository;
-import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -174,7 +173,11 @@ public final class PlayerLevelService implements Listener {
 
     // --- Vanilla bar takeover -----------------------------------------------------------------
 
-    /** Renders the custom level + progress on the vanilla experience bar. */
+    /**
+     * Renders the custom progress on the vanilla experience bar. The vanilla level number is
+     * pinned to 0 (which hides it): the level readout is the badge cluster from
+     * {@link PlayerLevelHud}, kept alive on the action bar by {@link ActionBarService}.
+     */
     public void applyBar(Player player) {
         LevelState state = states.get(player.getUniqueId());
         long xp = state == null ? 0L : state.xp;
@@ -186,11 +189,16 @@ public final class PlayerLevelService implements Listener {
         UUID playerId = player.getUniqueId();
         applyingBar.add(playerId);
         try {
-            player.setLevel(level);
+            player.setLevel(0);
             player.setExp(progress);
         } finally {
             applyingBar.remove(playerId);
         }
+    }
+
+    /** Persistent badge + level glyph cluster shown where the vanilla level number was. */
+    public Component hudOverlay(Player player) {
+        return PlayerLevelHud.overlay(level(player.getUniqueId()));
     }
 
     @EventHandler
@@ -265,36 +273,41 @@ public final class PlayerLevelService implements Listener {
     // --- Feedback -----------------------------------------------------------------------------
 
     /**
-     * Magnet-style gain: enchant glyph particles stream INTO the player's chest (the ENCHANT
-     * particle moves from its offset toward the spawn point), orb chimes, and the badge pulses
-     * between its normal and glow frame on the action bar with the gained amount.
+     * Meteor-shower gain: a HUD glyph animation rains meteor streaks (tinted the badge tier color)
+     * down into the badge above the XP bar while the badge pulses between its normal and glow
+     * frames with the gained amount beside it, backed by orb chimes. Frames go through
+     * {@link ActionBarService} overrides so the persistent badge overlay resumes cleanly after.
      */
     private void playXpGain(Player player, long amount, int level) {
-        Location chest = player.getLocation().add(0.0D, 1.1D, 0.0D);
-        player.getWorld().spawnParticle(Particle.ENCHANT, chest, 28, 1.7D, 1.1D, 1.7D, 0.9D);
-        player.playSound(chest, Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.55F, 1.35F);
+        player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.55F, 1.35F);
         plugin.platformScheduler().runOnPlayerLater(player, () -> {
             if (player.isOnline()) {
-                player.getWorld().spawnParticle(Particle.ENCHANT, player.getLocation().add(0.0D, 1.1D, 0.0D), 16, 0.9D, 0.7D, 0.9D, 0.7D);
                 player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.5F, 1.7F);
             }
         }, 4L);
-        TextColor color = PlayerLevelBadges.tierColor(level);
-        // 6 action-bar frames, 4 ticks apart: badge <-> glow with the amount, reading as absorption.
-        for (int frame = 0; frame < 6; frame++) {
+        // 6 meteor frames, 3 ticks apart, badge glow alternating; then a resolve frame that lets
+        // the impact flash fade before the static overlay takes back over.
+        for (int frame = 0; frame < PlayerLevelHud.METEOR_FRAMES; frame++) {
             boolean glow = (frame & 1) == 0;
-            long delay = frame * 4L;
-            plugin.platformScheduler().runOnPlayerLater(player, () -> {
-                if (!player.isOnline()) {
-                    return;
-                }
-                Component badge = glow ? PlayerLevelBadges.badgeGlow(level) : PlayerLevelBadges.badge(level);
-                player.sendActionBar(Component.text()
-                        .append(badge)
-                        .append(Component.text(" +" + amount + " XP", color))
-                        .build());
-            }, delay);
+            int meteorFrame = frame;
+            sendGainFrameLater(player, level, glow, meteorFrame, amount, frame * 3L, 8);
         }
+        sendGainFrameLater(player, level, true, -1, amount, PlayerLevelHud.METEOR_FRAMES * 3L, 14);
+    }
+
+    private void sendGainFrameLater(Player player, int level, boolean glow, int meteorFrame, long amount, long delayTicks, int holdTicks) {
+        plugin.platformScheduler().runOnPlayerLater(player, () -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            Component frame = PlayerLevelHud.gainFrame(level, glow, meteorFrame, amount);
+            ActionBarService actionBar = plugin.actionBarService();
+            if (actionBar != null) {
+                actionBar.pushOverride(player, frame, holdTicks);
+            } else {
+                player.sendActionBar(frame);
+            }
+        }, delayTicks);
     }
 
     private void celebrateLevelUp(Player player, int newLevel) {

@@ -79,9 +79,8 @@ public final class ActionBarService {
    }
 
    public void refresh() {
-      if (this.plugin.hudProviderService().activeProvider().isEmpty()) {
-         return;
-      }
+      // No provider gate: even without a mode HUD the refresh keeps the persistent
+      // level-badge overlay (see snapshot) from fading off the action bar.
       this.pruneOfflineSentFrames();
       this.plugin.platformScheduler().runForEachPlayer(this::refreshPlayer);
    }
@@ -162,10 +161,24 @@ public final class ActionBarService {
             .hudProviderService()
             .activeProvider()
             .flatMap(activeProvider -> this.resolveProviderBar(activeProvider, player, rank, placeholders, tick, defaultBar));
-         return new ActionBarService.ActionBarSnapshot(providerBar.orElse(defaultBar), true, false, providerBar.isPresent(), false);
+         // The level-badge cluster is advance-neutral (net width 0), so appending it never
+         // shifts the provider bar's centering. Overrides (transient plain text) skip it:
+         // arbitrary text has nonzero width, which would push the badge off-center.
+         Component content = providerBar.orElse(defaultBar);
+         Component overlay = this.levelOverlay(player);
+         if (overlay != null) {
+            content = Component.text().append(content).append(overlay).build();
+         }
+         return new ActionBarService.ActionBarSnapshot(content, true, false, providerBar.isPresent(), false);
       } else {
          return new ActionBarService.ActionBarSnapshot(Component.text(""), enabled, suppressedPlayer, false, false);
       }
+   }
+
+   /** Persistent level-badge glyph cluster, or null when the level service is unavailable. */
+   private Component levelOverlay(Player player) {
+      network.skypvp.paper.service.PlayerLevelService levels = this.plugin.playerLevelService();
+      return levels == null ? null : levels.hudOverlay(player);
    }
 
    private Optional<Component> resolveProviderBar(
