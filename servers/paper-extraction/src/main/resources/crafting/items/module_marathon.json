@@ -1,0 +1,10 @@
+{
+  "typeId": "extraction:module_marathon",
+  "displayName": "Marathon Overclock",
+  "moduleEffects": [
+    {"label": "20% Stamina Pool", "positive": true},
+    {"label": "12% Stamina Regen", "positive": true},
+    {"label": "10% More Stamina Drain", "positive": false}
+  ],
+  "loreLines": ["<green>Chestplate overclock"]
+}

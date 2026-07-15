@@ -13,6 +13,9 @@ public final class InitialServerSelectionListener {
 
    @Subscribe
    public void onPlayerChooseInitialServer(PlayerChooseInitialServerEvent event) {
-      this.routingService.selectBestEntryServer().ifPresent(event::setInitialServer);
+      this.routingService.selectReconnectServerForBreachRaider(event.getPlayer().getUniqueId()).ifPresentOrElse(
+         event::setInitialServer,
+         () -> this.routingService.selectBestEntryServer().ifPresent(event::setInitialServer)
+      );
    }
 }

@@ -11,6 +11,7 @@ dependencies {
     compileOnly project(':shared:network-core')
     compileOnly project(':servers:paper-gamemode-api')
     compileOnly project(':servers:paper-core')
+    compileOnly project(':servers:paper-nms-api')
     compileOnly "io.papermc.paper:paper-api:${rootProject.ext.paperApiVersion}"
     compileOnly "com.github.retrooper:packetevents-spigot:${rootProject.ext.packetEventsVersion}"
     compileOnly "com.google.code.gson:gson:${rootProject.ext.gsonVersion}"

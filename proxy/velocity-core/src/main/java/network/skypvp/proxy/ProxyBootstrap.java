@@ -41,7 +41,10 @@ import network.skypvp.proxy.chat.ProxyChatFormatRepository;
 import network.skypvp.proxy.chat.ProxyChatFormatService;
 import network.skypvp.proxy.integration.RedisNetworkEventSubscriber;
 import network.skypvp.proxy.listener.BackendServerListener;
+import network.skypvp.proxy.listener.AuthenticatedLoginListener;
+import network.skypvp.proxy.listener.FriendPresenceListener;
 import network.skypvp.proxy.listener.BanLoginListener;
+import network.skypvp.proxy.listener.BreachDisconnectedReconnectListener;
 import network.skypvp.proxy.listener.InitialServerSelectionListener;
 import network.skypvp.proxy.listener.MaintenanceLoginListener;
 
@@ -53,6 +56,7 @@ import network.skypvp.proxy.listener.ProxyConnectionListener;
 import network.skypvp.proxy.listener.ProxyLimboLifecycleListener;
 import network.skypvp.proxy.listener.ProxyLimboLoginListener;
 import network.skypvp.proxy.listener.ProxyPingListener;
+import network.skypvp.proxy.listener.ProxyResourcePackListener;
 import network.skypvp.proxy.listener.ProxyRouteRequestListener;
 import network.skypvp.proxy.listener.ProxySocialRequestListener;
 import network.skypvp.proxy.listener.QueueDisconnectListener;
@@ -61,6 +65,7 @@ import network.skypvp.proxy.listener.VersionCompatibilityGateListener;
 import network.skypvp.proxy.registry.MaintenanceRegistry;
 import network.skypvp.proxy.registry.NetworkStateRegistry;
 import network.skypvp.proxy.registry.PrivateMessageRegistry;
+import network.skypvp.proxy.resourcepack.ProxyResourcePackService;
 import network.skypvp.proxy.service.ProxyChatModerationService;
 import network.skypvp.proxy.service.PlayerLocaleService;
 import network.skypvp.proxy.service.ProxyChatTranslationDeliveryService;
@@ -68,6 +73,7 @@ import network.skypvp.proxy.service.ProxyPrivateMessageService;
 import network.skypvp.proxy.service.Fabric8KubernetesApiService;
 import network.skypvp.proxy.service.KubernetesApiService;
 import network.skypvp.proxy.service.KubernetesAutoscalerService;
+import network.skypvp.proxy.service.ServerDrainMigrationService;
 
 import network.skypvp.proxy.repository.FriendRepository;
 import network.skypvp.proxy.repository.PartyRepository;
@@ -77,6 +83,7 @@ import network.skypvp.proxy.repository.ServerRegistryRepository;
 import network.skypvp.proxy.repository.WorldPresetRegistryRepository;
 import network.skypvp.proxy.service.AdmissionControlService;
 
+import network.skypvp.proxy.service.BreachPlayMatchmakingService;
 import network.skypvp.proxy.service.PartyMemberMover;
 import network.skypvp.proxy.service.PartyQueueService;
 import network.skypvp.proxy.service.PartyService;
@@ -138,6 +145,7 @@ public final class ProxyBootstrap {
    private PartyQueueService partyQueueService;
    private PartyTransferGate partyTransferGate;
    private PartyMemberMover partyMemberMover;
+   private BreachPlayMatchmakingService breachPlayMatchmakingService;
    private WorldPresetRegistryRepository worldPresetRegistryRepository;
    private DatabaseManager proxyDataSource;
 
@@ -146,6 +154,9 @@ public final class ProxyBootstrap {
    private ScheduledTask lifecycleSweepTask;
    private ScheduledTask dynamicBackendSweepTask;
    private ScheduledTask autoscalerTask;
+   private ScheduledTask resourcePackTimeoutTask;
+   private ScheduledTask resourcePackMetaRefreshTask;
+   private ProxyResourcePackService resourcePackService;
 
    @Inject
    public ProxyBootstrap(ProxyServer proxyServer, Logger logger, @DataDirectory Path dataDirectory) {
@@ -158,6 +169,13 @@ public final class ProxyBootstrap {
    public void onProxyInitialization(ProxyInitializeEvent event) {
       this.config = this.loadConfig();
       this.config.normalizeDefaults();
+      this.resourcePackService = new ProxyResourcePackService(
+         this.proxyServer,
+         this.logger,
+         this.dataDirectory,
+         this.config.resourcePack
+      );
+      this.resourcePackService.start();
       this.networkStateRegistry = new NetworkStateRegistry();
       this.networkStateRegistry.setConfig(this.config);
       this.serverRoutingService = new ServerRoutingService(this.proxyServer, this.networkStateRegistry, this.config, null);
@@ -195,11 +213,20 @@ public final class ProxyBootstrap {
       }
 
       this.partyTransferGate = new PartyTransferGate();
-      this.partyQueueService = new PartyQueueService(this.proxyServer, this.serverRoutingService, this.partyTransferGate, this.logger);
-      this.partyMemberMover = new PartyMemberMover(this.proxyServer, this.partyTransferGate, this.partyQueueService, this.serverRoutingService);
       if (this.config.redisEnabled) {
          this.redisPublisher = new RedisEventPublisher(this.config.redis);
       }
+      this.partyQueueService = new PartyQueueService(this.proxyServer, this.serverRoutingService, this.partyTransferGate, this.redisPublisher, this.logger);
+      this.partyMemberMover = new PartyMemberMover(this.proxyServer, this.partyTransferGate, this.partyQueueService, this.serverRoutingService);
+      this.breachPlayMatchmakingService = new BreachPlayMatchmakingService(
+         this.proxyServer,
+         this.serverRoutingService,
+         this.partyService,
+         this.partyTransferGate,
+         this.redisPublisher,
+         this.logger
+      );
+      this.partyQueueService.bindBreachPlayMatchmaking(this.breachPlayMatchmakingService);
       this.playerLocaleService = new PlayerLocaleService();
       this.proxyServer.getEventManager().register(this, new network.skypvp.proxy.listener.PlayerLocaleListener(this.playerLocaleService));
       network.skypvp.shared.chat.ChatTranslator azureTranslator = network.skypvp.shared.chat.ChatTranslatorFactory.createAzure(
@@ -343,15 +370,46 @@ public final class ProxyBootstrap {
       this.proxyServer.getChannelRegistrar().register(new ChannelIdentifier[]{MinecraftChannelIdentifier.from("skypvp:menu")});
       this.proxyServer
          .getEventManager()
-         .register(this, new ProxyConnectionListener(this.logger, this.config, this.redisPublisher, this.networkStateRegistry, this.playerSocialSettingsRepository));
+         .register(this, new ProxyConnectionListener(this.logger, this.config, this.redisPublisher, this.networkStateRegistry, this.playerSocialSettingsRepository, this.privateMessageRegistry));
+      if (this.friendRepository != null) {
+         this.proxyServer.getEventManager().register(
+            this,
+            new FriendPresenceListener(this.proxyServer, this, this.friendRepository, this.networkStateRegistry, this.logger)
+         );
+      }
+      this.proxyServer.getEventManager().register(this, new ProxyResourcePackListener(this.resourcePackService));
+      this.resourcePackTimeoutTask = this.proxyServer.getScheduler()
+         .buildTask(this, () -> this.resourcePackService.enforceTimeouts())
+         .repeat(1L, TimeUnit.SECONDS)
+         .schedule();
+      if (this.resourcePackService.usesRemoteMeta()) {
+         long refreshSeconds = this.resourcePackService.metaRefreshSeconds();
+         this.resourcePackMetaRefreshTask = this.proxyServer.getScheduler()
+            .buildTask(this, () -> this.resourcePackService.refreshFromMeta())
+            .delay(refreshSeconds, TimeUnit.SECONDS)
+            .repeat(refreshSeconds, TimeUnit.SECONDS)
+            .schedule();
+         this.logger.info("[resource-pack] Meta refresh every {}s", refreshSeconds);
+      }
       this.proxyServer
          .getEventManager()
          .register(this, new BackendServerListener(this.serverRoutingService, this.proxyHoldService, this.queueService, this.logger));
       this.proxyServer
          .getEventManager()
-         .register(this, new ProxyRouteRequestListener(destinationRouter, this.logger));
+         .register(this, new ProxyRouteRequestListener(
+            this.proxyServer,
+            destinationRouter,
+            this.partyService,
+            this.partyMemberMover,
+            this.breachPlayMatchmakingService,
+            this.logger
+         ));
       this.proxyServer.getEventManager().register(this, new ProxySocialRequestListener(this.proxyServer, this.logger));
       this.proxyServer.getEventManager().register(this, new InitialServerSelectionListener(this.serverRoutingService));
+      this.proxyServer.getEventManager().register(
+         this,
+         new BreachDisconnectedReconnectListener(this.serverRoutingService, this.networkStateRegistry, this.logger)
+      );
       this.proxyServer.getEventManager().register(this, new VersionCompatibilityGateListener(this.config, this.logger));
       this.proxyServer.getEventManager().register(this, new QueueDisconnectListener(this.queueService, this.partyQueueService));
       this.proxyServer
@@ -361,10 +419,13 @@ public final class ProxyBootstrap {
          .getEventManager()
          .register(this, new PartyFollowLeaderListener(this.proxyServer, this.partyService, this.partyMemberMover));
       this.proxyServer.getEventManager().register(this, new PartyNavigationGuardListener(this.proxyServer, this.partyService, this.partyTransferGate));
-      this.proxyServer.getEventManager().register(this, new PartyProxyLifecycleListener(this.proxyServer, this.partyService, this.partyTransferGate));
+      this.proxyServer.getEventManager().register(
+         this,
+         new PartyProxyLifecycleListener(this.proxyServer, this.partyService, this.partyTransferGate, this.breachPlayMatchmakingService)
+      );
       // Custom ranks removed
 
-      this.proxyServer.getEventManager().register(this, new ProxyPingListener(this.proxyServer, this.config, this.maintenanceRegistry));
+      this.proxyServer.getEventManager().register(this, new ProxyPingListener(this.proxyServer, this.config, this.maintenanceRegistry, this.networkStateRegistry, this.logger));
 
       this.proxyServer
          .getEventManager()
@@ -380,6 +441,13 @@ public final class ProxyBootstrap {
          this.logger.info("Proxy punishment system registered: ban enforcement active at login gate.");
       } else {
          this.logger.info("Punishment system disabled: PostgreSQL not configured.");
+      }
+
+      this.proxyServer.getEventManager().register(this, new AuthenticatedLoginListener(this.config));
+      if (this.config.requireAuthenticatedAccounts) {
+         this.logger.info("Authenticated login gate active: offline Java UUIDs are rejected.");
+      } else {
+         this.logger.info("Authenticated login gate disabled (SPVP_REQUIRE_AUTHENTICATED_ACCOUNTS=false).");
       }
 
       this.proxyServer.getEventManager().register(this, new ReconnectFloodGuard(java.util.logging.Logger.getLogger("SkyPvP.FloodGuard")));
@@ -424,6 +492,18 @@ public final class ProxyBootstrap {
       }
 
       KubernetesApiService kubeApiService = new Fabric8KubernetesApiService(this.logger);
+      if (this.redisSubscriber != null) {
+         this.redisSubscriber.setDrainMigrationService(
+            new ServerDrainMigrationService(
+               this,
+               this.proxyServer,
+               this.serverRoutingService,
+               this.proxyHoldService,
+               kubeApiService,
+               this.logger
+            )
+         );
+      }
       ProxyDynamicServerTestCommand dynTestCmd = new ProxyDynamicServerTestCommand(this.proxyServer, this.networkStateRegistry, kubeApiService);
       this.proxyServer
          .getCommandManager()
@@ -459,7 +539,13 @@ public final class ProxyBootstrap {
             .register(this.proxyServer.getCommandManager().metaBuilder("friend").aliases(new String[]{"f"}).plugin(this).build(), friendCmd.build());
       }
 
-      PartyCommand partyCmd = new PartyCommand(this.proxyServer, this.partyService, this.partyMemberMover);
+      PartyCommand partyCmd = new PartyCommand(
+         this.proxyServer,
+         this.partyService,
+         this.partyMemberMover,
+         this.partyTransferGate,
+         this.breachPlayMatchmakingService
+      );
       this.proxyServer
          .getCommandManager()
          .register(this.proxyServer.getCommandManager().metaBuilder("party").aliases(new String[]{"p"}).plugin(this).build(), partyCmd.build());
@@ -517,6 +603,12 @@ public final class ProxyBootstrap {
             .schedule();
       }
 
+      this.proxyServer
+         .getScheduler()
+         .buildTask(this, this::sweepProxyMemoryCaches)
+         .repeat(60L, TimeUnit.SECONDS)
+         .schedule();
+
 
       this.logger.info("Proxy operations layer registered: MOTD, /broadcast, /send, /play, /msg, /reply, /maintenance.");
       this.logger.info("Proxy routing layer registered: dynamic initial routing, fallback routing, /serverinfo.");
@@ -545,6 +637,18 @@ public final class ProxyBootstrap {
 
    @Subscribe
    public void onProxyShutdown(ProxyShutdownEvent event) {
+      if (this.resourcePackTimeoutTask != null) {
+         this.resourcePackTimeoutTask.cancel();
+         this.resourcePackTimeoutTask = null;
+      }
+      if (this.resourcePackMetaRefreshTask != null) {
+         this.resourcePackMetaRefreshTask.cancel();
+         this.resourcePackMetaRefreshTask = null;
+      }
+      if (this.resourcePackService != null) {
+         this.resourcePackService.shutdown();
+         this.resourcePackService = null;
+      }
       if (this.redisSubscriber != null) {
          this.redisSubscriber.close();
       }
@@ -666,6 +770,24 @@ public final class ProxyBootstrap {
       }
    }
 
+   private void sweepProxyMemoryCaches() {
+      if (this.partyService != null) {
+         this.partyService.sweepStaleInvites();
+      }
+      if (this.breachPlayMatchmakingService != null) {
+         this.breachPlayMatchmakingService.sweepExpiredPendingDeploys();
+      }
+      if (this.queueService != null) {
+         this.queueService.sweepExpiredSwapConfirmations();
+      }
+      if (this.networkStateRegistry != null) {
+         java.util.Set<java.util.UUID> onlineIds = this.proxyServer.getAllPlayers().stream()
+            .map(player -> player.getUniqueId())
+            .collect(java.util.stream.Collectors.toSet());
+         this.networkStateRegistry.pruneOfflineSessions(onlineIds, 120_000L);
+      }
+   }
+
    private ProxyBootstrapConfig loadConfig() {
       ProxyBootstrapConfig config = ProxyBootstrapConfig.defaultConfig();
       config.networkName = "SkyPvP Network";
@@ -686,6 +808,25 @@ public final class ProxyBootstrap {
       config.postgres.database = this.envOrDefault("SPVP_POSTGRES_DATABASE", "skypvp_network");
       config.postgres.username = this.envOrDefault("SPVP_POSTGRES_USERNAME", "skypvp");
       config.postgres.password = this.envOrDefault("SPVP_POSTGRES_PASSWORD", "change-me");
+      config.requireAuthenticatedAccounts = !"false".equalsIgnoreCase(
+         this.envOrDefault("SPVP_REQUIRE_AUTHENTICATED_ACCOUNTS", "true")
+      );
+      config.resourcePack = new ProxyBootstrapConfig.ResourcePackSettings();
+      config.resourcePack.enabled = !"false".equalsIgnoreCase(
+         this.envOrDefault("SPVP_RESOURCE_PACK_ENABLED", "true")
+      );
+      config.resourcePack.force = !"false".equalsIgnoreCase(
+         this.envOrDefault("SPVP_RESOURCE_PACK_FORCE", "true")
+      );
+      config.resourcePack.serveLocally = !"false".equalsIgnoreCase(
+         this.envOrDefault("SPVP_RESOURCE_PACK_SERVE_LOCALLY", "true")
+      );
+      config.resourcePack.servePort = this.envIntOrDefault("SPVP_RESOURCE_PACK_SERVE_PORT", 8765);
+      config.resourcePack.url = this.envOrDefault("SPVP_RESOURCE_PACK_URL", "");
+      config.resourcePack.sha1 = this.envOrDefault("SPVP_RESOURCE_PACK_SHA1", "");
+      config.resourcePack.metaUrl = this.envOrDefault("SPVP_RESOURCE_PACK_META_URL", "");
+      config.resourcePack.metaRefreshSeconds = this.envLongOrDefault("SPVP_RESOURCE_PACK_META_REFRESH_SECONDS", 60L);
+      config.resourcePack.publicHost = this.envOrDefault("SPVP_RESOURCE_PACK_PUBLIC_HOST", "");
       config.chatModeration = new ChatModerationSettings(
          "true".equalsIgnoreCase(this.envOrDefault("SPVP_CHAT_MODERATION_ENABLED", "false")),
          this.envOrDefault("CHAT_MODERATION_LANGUAGE", "eng"),
@@ -738,6 +879,19 @@ public final class ProxyBootstrap {
       }
       try {
          return Integer.parseInt(value.trim());
+      } catch (NumberFormatException ex) {
+         this.logger.warn("Invalid {} '{}'; using default {}.", key, value, defaultValue);
+         return defaultValue;
+      }
+   }
+
+   private long envLongOrDefault(String key, long defaultValue) {
+      String value = System.getenv(key);
+      if (value == null || value.isBlank()) {
+         return defaultValue;
+      }
+      try {
+         return Long.parseLong(value.trim());
       } catch (NumberFormatException ex) {
          this.logger.warn("Invalid {} '{}'; using default {}.", key, value, defaultValue);
          return defaultValue;

@@ -1,0 +1,9 @@
+{
+  "typeId": "extraction:module_visor_lock",
+  "displayName": "Visor Lock Module",
+  "moduleEffects": [
+    {"label": "6% Defense", "positive": true},
+    {"label": "8% Attack Speed", "positive": false}
+  ],
+  "loreLines": ["<gray>Helmet-only module"]
+}

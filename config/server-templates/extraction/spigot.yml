@@ -113,12 +113,12 @@ world-settings:
     seed-mineshaft: default
     seed-stronghold: default
     hunger:
-      jump-walk-exhaustion: 0.05
-      jump-sprint-exhaustion: 0.2
-      combat-exhaustion: 0.1
-      regen-exhaustion: 6.0
-      swim-multiplier: 0.01
-      sprint-multiplier: 0.1
+      jump-walk-exhaustion: 0.0
+      jump-sprint-exhaustion: 0.0
+      combat-exhaustion: 0.0
+      regen-exhaustion: 0.0
+      swim-multiplier: 0.0
+      sprint-multiplier: 0.0
       other-multiplier: 0.0
     max-tnt-per-tick: 100
     max-tick-time:

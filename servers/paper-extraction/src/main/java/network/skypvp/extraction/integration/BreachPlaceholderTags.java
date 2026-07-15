@@ -18,6 +18,7 @@ public final class BreachPlaceholderTags {
             case STARTING -> "starting";
             case ENDING -> "ending";
             case RESETTING -> "resetting";
+            case TOXIC -> "toxic";
             case ACTIVE -> activePhaseKey(instance, config);
         };
     }

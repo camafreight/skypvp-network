@@ -1,0 +1,10 @@
+{
+  "typeId": "extraction:module_overdrive",
+  "displayName": "Overdrive Overclock",
+  "moduleEffects": [
+    {"label": "15% Movement Speed", "positive": true},
+    {"label": "20% Attack Speed", "positive": true},
+    {"label": "10% Defense", "positive": false}
+  ],
+  "loreLines": ["<light_purple>Chestplate overclock"]
+}

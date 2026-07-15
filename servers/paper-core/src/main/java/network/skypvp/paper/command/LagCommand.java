@@ -8,7 +8,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import net.kyori.adventure.text.minimessage.MiniMessage;
+import network.skypvp.paper.clientupdate.ClientUpdatePipeline;
+import network.skypvp.paper.clientupdate.ClientUpdateStats;
+import network.skypvp.paper.clientupdate.UpdateChannel;
 import network.skypvp.paper.service.PerformanceMonitorService;
 import network.skypvp.shared.FieldValueFormatter;
 import org.bukkit.command.Command;
@@ -17,12 +19,17 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 
 public final class LagCommand implements CommandExecutor, TabCompleter {
-   // $VF: renamed from: MM net.kyori.adventure.text.minimessage.MiniMessage
    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
    private final PerformanceMonitorService monitorService;
+   private final ClientUpdatePipeline pipeline;
 
    public LagCommand(PerformanceMonitorService monitorService) {
+      this(monitorService, null);
+   }
+
+   public LagCommand(PerformanceMonitorService monitorService, ClientUpdatePipeline pipeline) {
       this.monitorService = monitorService;
+      this.pipeline = pipeline;
    }
 
    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -59,12 +66,16 @@ public final class LagCommand implements CommandExecutor, TabCompleter {
                this.sendEvents(sender);
                yield true;
             }
+            case "pipeline" -> {
+               this.sendPipeline(sender);
+               yield true;
+            }
             case "clear" -> {
                this.monitorService.clearEvents(sender);
                yield true;
             }
             default -> {
-               sender.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /lag <status|events|clear></#888888>"));
+               sender.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /lag <status|events|pipeline|clear></#888888>"));
                yield true;
             }
          };
@@ -83,6 +94,34 @@ public final class LagCommand implements CommandExecutor, TabCompleter {
       sender.sendMessage(ServerTextUtil.miniMessageComponent("  " + FieldValueFormatter.fieldValueMiniMessage("GC Time Delta", snapshot.gcPressureMs() + " ms")));
       sender.sendMessage(ServerTextUtil.miniMessageComponent("  " + FieldValueFormatter.fieldValueMiniMessage("HUD Churn", snapshot.providerChurnRate() + "/s")));
       sender.sendMessage(ServerTextUtil.miniMessageComponent("  " + FieldValueFormatter.fieldValueMiniMessage("Severe Streak", String.valueOf(snapshot.severeStreak()))));
+      if (this.pipeline != null) {
+         sender.sendMessage(ServerTextUtil.miniMessageComponent("  <#888888>Use <#FFFFFF>/lag pipeline</#FFFFFF> for client-update counters.</#888888>"));
+      }
+   }
+
+   private void sendPipeline(CommandSender sender) {
+      if (this.pipeline == null) {
+         sender.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Client update pipeline is not running.</#888888>"));
+         return;
+      }
+      ClientUpdateStats stats = this.pipeline.snapshotStats();
+      sender.sendMessage(ServerTextUtil.miniMessageComponent("<#FFB300><bold>[Pipeline]</bold></#FFB300> <#888888>drains=" + stats.drainTicks() + "</#888888>"));
+      for (UpdateChannel channel : UpdateChannel.values()) {
+         long enq = stats.enqueued(channel);
+         long coal = stats.coalesced(channel);
+         long emit = stats.emitted(channel);
+         long drop = stats.dropped(channel);
+         if (enq == 0L && coal == 0L && emit == 0L && drop == 0L) {
+            continue;
+         }
+         sender.sendMessage(ServerTextUtil.miniMessageComponent(
+               "  <#FFFFFF>" + channel.name() + "</#FFFFFF> "
+                     + "<#888888>enq=</#888888>" + enq
+                     + " <#888888>coal=</#888888>" + coal
+                     + " <#888888>emit=</#888888>" + emit
+                     + " <#888888>drop=</#888888>" + drop
+         ));
+      }
    }
 
    private void sendEvents(CommandSender sender) {
@@ -100,7 +139,7 @@ public final class LagCommand implements CommandExecutor, TabCompleter {
 
    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
       if (args.length == 1) {
-         List<String> options = List.of("status", "events", "clear");
+         List<String> options = List.of("status", "events", "pipeline", "clear");
          String prefix = args[0].toLowerCase(Locale.ROOT);
          List<String> out = new ArrayList<>();
 
@@ -120,27 +159,7 @@ public final class LagCommand implements CommandExecutor, TabCompleter {
       return value < 0.0 ? "n/a" : String.format(Locale.ROOT, "%.2f", value);
    }
 
-   private String colorForTps(double tps) {
-      if (tps < 0.0) {
-         return "#888888";
-      } else if (tps >= 19.0) {
-         return "#55FF55";
-      } else {
-         return tps >= 17.0 ? "#FFB300" : "#FF5555";
-      }
-   }
-
-   private String colorForMspt(double mspt) {
-      if (mspt < 0.0) {
-         return "#888888";
-      } else if (mspt <= 40.0) {
-         return "#55FF55";
-      } else {
-         return mspt <= 55.0 ? "#FFB300" : "#FF5555";
-      }
-   }
-
    private String escape(String input) {
-      return input.replace("<", "\\<").replace(">", "\\>");
+      return input == null ? "" : input.replace("<", "").replace(">", "");
    }
 }

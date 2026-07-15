@@ -3,9 +3,9 @@ bind = "0.0.0.0:25565"
 # their server list. Only MiniMessage format is accepted.
 motd = "SkyPvP Local Network"
 show-max-players = 500
-online-mode = false
-# In local dev, disable secure profile enforcement when online auth is off.
-force-key-authentication = false
+online-mode = true
+# Require signed chat profiles when online-mode is enabled (production default).
+force-key-authentication = true
 player-info-forwarding-mode = "modern"
 prevent-client-proxy-connections = false
 #If you are using modern or BungeeGuard IP forwarding, configure a file that contains a unique secret here.

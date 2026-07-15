@@ -11,6 +11,8 @@ import network.skypvp.lobby.game.TagModule;
 import network.skypvp.lobby.game.parkour.ParkourManager;
 import network.skypvp.lobby.game.parkour.ParkourRedisSync;
 import network.skypvp.lobby.game.parkour.ParkourSetupCommand;
+import network.skypvp.lobby.integration.LobbyHotbarActionExtension;
+import network.skypvp.lobby.integration.LobbyPlaceholderBridgeImpl;
 import network.skypvp.lobby.listener.LobbyPlayerProfileListener;
 import network.skypvp.lobby.listener.LobbySelectorListener;
 import network.skypvp.lobby.listener.LobbyWorldGuardListener;
@@ -20,7 +22,10 @@ import network.skypvp.lobby.task.LobbySpawnBalancerTask;
 import network.skypvp.lobby.task.LobbyWorldMaintenanceTask;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.gamemode.api.CoreBehaviorProfile;
+import network.skypvp.paper.gamemode.api.HotbarActionExtension;
 import network.skypvp.paper.gamemode.api.HudProvider;
+import network.skypvp.paper.gamemode.api.LobbyPlaceholderBridge;
+import network.skypvp.lobby.service.LobbyNavigatorMenus;
 import network.skypvp.paper.library.HolographicLibrary;
 import network.skypvp.paper.library.WorldGroundItemCleanup;
 import network.skypvp.lobby.library.HotbarItemsLibrary;
@@ -41,13 +46,16 @@ import java.util.Optional;
 public final class LobbyModePlugin extends JavaPlugin {
    private final LobbyMechanicCatalog mechanics = new LobbyMechanicCatalog();
    private final CoreBehaviorProfile behaviorProfile = new LobbyCoreBehaviorProfile();
-   private final HudProvider hudProvider = new LobbyHudProvider();
+   private HudProvider hudProvider;
+   private network.skypvp.paper.service.PartyScoreboardData partyScoreboardData;
    private LobbyLayoutService lobbyLayoutService;
    private PlatformTask lobbyMonitorTask;
    private PlatformTask lobbyMaintenanceTask;
    private PlatformTask lobbySpawnBalancerTask;
    private boolean lobbySystemsInitialized;
    private boolean lobbyBootstrapScheduled;
+   private LobbyHotbarActionExtension lobbyHotbarActionExtension;
+   private LobbyPlaceholderBridgeImpl lobbyPlaceholderBridge;
 
    public LobbyModePlugin() {
    }
@@ -55,10 +63,18 @@ public final class LobbyModePlugin extends JavaPlugin {
    public void onEnable() {
       this.getServer().getServicesManager().register(CoreBehaviorProfile.class, this.behaviorProfile, this,
             ServicePriority.Normal);
+      PaperCorePlugin core = this.getServer().getPluginManager().getPlugin("SkyPvPCore") instanceof PaperCorePlugin found
+            ? found
+            : null;
+      if (core != null) {
+         this.partyScoreboardData = new network.skypvp.paper.service.PartyScoreboardData(core);
+         this.partyScoreboardData.start();
+      }
+      this.hudProvider = new LobbyHudProvider(core, this.partyScoreboardData);
       this.getServer().getServicesManager().register(HudProvider.class, this.hudProvider, this, ServicePriority.Normal);
       this.getLogger().info("Loaded mode: " + this.mechanics.modeKey() + " (" + this.mechanics.mechanics().size()
             + " classified mechanics)");
-      if (this.getServer().getPluginManager().getPlugin("SkyPvPCore") instanceof PaperCorePlugin core) {
+      if (core != null) {
          this.bootstrapLobbySystems(core);
       } else {
          this.getLogger().warning("SkyPvPCore not found; lobby layout systems disabled.");
@@ -69,13 +85,15 @@ public final class LobbyModePlugin extends JavaPlugin {
       if (!this.lobbySystemsInitialized) {
          if (core.serverRole() != NetworkServerRole.LOBBY) {
             this.getLogger().info("Server role is " + core.serverRole() + "; skipping lobby-only systems.");
+            this.releaseModeReadyHold(core);
          } else {
             boolean defaultLobbySystems = true;
             if (!core.gameModeBehaviorService().booleanValue("core.lobby.systems.enabled", defaultLobbySystems)) {
                this.getLogger().info("Lobby systems disabled by behavior profile override.");
+               this.releaseModeReadyHold(core);
             } else {
                LobbyRuntimeStateRegistry lobbyStateRegistry = new LobbyRuntimeStateRegistry();
-               HotbarItemsLibrary hotbarItemsLibrary = new HotbarItemsLibrary(this);
+               HotbarItemsLibrary hotbarItemsLibrary = new HotbarItemsLibrary(this, core.coreHotbarService());
                NpcLibrary npcLibrary = core.npcLibrary();
                HolographicLibrary holographicLibrary = core.holographicLibrary();
                if (npcLibrary != null && holographicLibrary != null) {
@@ -130,8 +148,18 @@ public final class LobbyModePlugin extends JavaPlugin {
                         .registerEvents(
                               new LobbyPlayerProfileListener(core, lobbyStateRegistry, lobbySpawn, hotbarItemsLibrary),
                               this);
-                  this.getServer().getPluginManager()
-                        .registerEvents(new LobbySelectorListener(core, lobbyStateRegistry, core.guiManager()), this);
+                  LobbySelectorListener selectorListener = new LobbySelectorListener(core, lobbyStateRegistry);
+                  LobbyNavigatorMenus navigatorMenus = new LobbyNavigatorMenus(core, core.guiManager(), selectorListener);
+                  selectorListener.bindNavigatorMenus(navigatorMenus);
+                  this.getServer().getPluginManager().registerEvents(selectorListener, this);
+                  this.lobbyPlaceholderBridge = new LobbyPlaceholderBridgeImpl(lobbyStateRegistry);
+                  this.getServer()
+                        .getServicesManager()
+                        .register(LobbyPlaceholderBridge.class, this.lobbyPlaceholderBridge, this, ServicePriority.Normal);
+                  this.lobbyHotbarActionExtension = new LobbyHotbarActionExtension(core, selectorListener, gameManager);
+                  this.getServer()
+                        .getServicesManager()
+                        .register(HotbarActionExtension.class, this.lobbyHotbarActionExtension, this, ServicePriority.Normal);
                   if (core.getConfig().getBoolean("lobby.parkour.enabled", true)) {
                      ParkourManager parkourManager = new ParkourManager(this, gameManager);
                      ParkourRedisSync redisSync = new ParkourRedisSync(this, core, parkourManager);
@@ -185,11 +213,19 @@ public final class LobbyModePlugin extends JavaPlugin {
                            spreadRadius);
                      this.lobbySpawnBalancerTask = core.platform().runSyncTimer(balancer, 100L, (long) interval);
                   }
+                  this.releaseModeReadyHold(core);
                } else {
                   this.getLogger().warning("Core NPC/hologram libraries unavailable; lobby layout systems disabled.");
+                  this.releaseModeReadyHold(core);
                }
             }
          }
+      }
+   }
+
+   private void releaseModeReadyHold(PaperCorePlugin core) {
+      if (core != null && core.worldStateService() != null) {
+         core.worldStateService().releaseRoutingHold(network.skypvp.paper.service.WorldStateService.HOLD_MODE_PLUGIN);
       }
    }
 
@@ -206,8 +242,19 @@ public final class LobbyModePlugin extends JavaPlugin {
          this.lobbySpawnBalancerTask.cancel();
       }
 
+      if (this.partyScoreboardData != null) {
+         this.partyScoreboardData.stop();
+      }
+      if (this.lobbyHotbarActionExtension != null) {
+         this.getServer().getServicesManager().unregister(HotbarActionExtension.class, this.lobbyHotbarActionExtension);
+      }
+      if (this.lobbyPlaceholderBridge != null) {
+         this.getServer().getServicesManager().unregister(LobbyPlaceholderBridge.class, this.lobbyPlaceholderBridge);
+      }
       this.getServer().getServicesManager().unregister(CoreBehaviorProfile.class, this.behaviorProfile);
-      this.getServer().getServicesManager().unregister(HudProvider.class, this.hudProvider);
+      if (this.hudProvider != null) {
+         this.getServer().getServicesManager().unregister(HudProvider.class, this.hudProvider);
+      }
    }
 
    private Location resolveLobbySpawn(PaperCorePlugin core) {

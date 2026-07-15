@@ -48,17 +48,18 @@ Mechanics_Core_Download:
   Read_Timeout: 30
 
 # Automatically download resource pack if wanted.
+# SkyPvP paper-core owns forced network pack delivery — keep WM pack send disabled.
 Resource_Pack_Download:
-  Enabled: true  # even when this is false, you can use "Automatically_Send_To_Player"
+  Enabled: false
   #
   # THIS DEFAULT LINK IS PURELY FOR TESTING PURPOSES!
   # You should replace it with your own resource pack link as soon as possible.
   #
-  Link: "LATEST"  # replace with your dropbox link!
+  Link: "LATEST"  # unused while Automatically_Send_To_Player is false
   Connection_Timeout: 10
   Read_Timeout: 30
-  Automatically_Send_To_Player: true
-  Force_Player_Download: false # When this is true, the player will be kicked from the server if they don't download the pack
+  Automatically_Send_To_Player: false
+  Force_Player_Download: false
   Kick_Message: "You must download the resource pack! (WeaponMechanics)"
 
 # If you don't use a specific trigger, it can be disabled here. The performance

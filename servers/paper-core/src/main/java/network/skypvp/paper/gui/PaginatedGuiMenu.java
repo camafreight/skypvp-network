@@ -14,7 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
-public final class PaginatedGuiMenu<T> implements GuiMenu {
+public final class PaginatedGuiMenu<T> implements GuiMenu, AnimatedGuiMenu {
    private final Component title;
    private final int size;
    private final List<Integer> pageSlots;
@@ -27,6 +27,7 @@ public final class PaginatedGuiMenu<T> implements GuiMenu {
    private final int nextPageSlot;
    private final BiFunction<Integer, Integer, ItemStack> nextPageItem;
    private final int initialPage;
+   private final boolean liveRefresh;
    private int currentPage;
 
    private PaginatedGuiMenu(PaginatedGuiMenu.Builder<T> builder) {
@@ -42,6 +43,7 @@ public final class PaginatedGuiMenu<T> implements GuiMenu {
       this.nextPageSlot = builder.nextPageSlot;
       this.nextPageItem = builder.nextPageItem;
       this.initialPage = Math.max(0, builder.initialPage);
+      this.liveRefresh = builder.liveRefresh;
       this.currentPage = this.initialPage;
    }
 
@@ -78,16 +80,7 @@ public final class PaginatedGuiMenu<T> implements GuiMenu {
          }
       }
 
-      int start = this.currentPage * this.pageSlots.size();
-      int end = Math.min(start + this.pageSlots.size(), entries.size());
-
-      for (int index = start; index < end; index++) {
-         int pageIndex = index - start;
-         ItemStack item = this.itemRenderer.apply(viewer, entries.get(index));
-         if (item != null) {
-            inventory.setItem(this.pageSlots.get(pageIndex), item.clone());
-         }
-      }
+      this.renderPageItems(viewer, inventory);
 
       if (this.previousPageSlot >= 0 && this.currentPage > 0) {
          inventory.setItem(this.previousPageSlot, this.previousPageItem.apply(this.currentPage, totalPages).clone());
@@ -132,6 +125,49 @@ public final class PaginatedGuiMenu<T> implements GuiMenu {
       return 90L;
    }
 
+   @Override
+   public GuiAnimation backgroundAnimation() {
+      return null;
+   }
+
+   @Override
+   public boolean hasAnimatedButtons() {
+      return this.liveRefresh;
+   }
+
+   @Override
+   public void renderAnimatedFrame(Player viewer, Inventory inventory, int frameIndex) {
+   }
+
+   @Override
+   public void renderAnimatedButtons(Player viewer, Inventory inventory, long tickMillis) {
+      if (!this.liveRefresh) {
+         return;
+      }
+      for (Entry<Integer, PaginatedGuiMenu.StaticButton> entry : this.staticButtons.entrySet()) {
+         ItemStack item = entry.getValue().itemFactory.apply(viewer);
+         if (item != null) {
+            inventory.setItem(entry.getKey(), item.clone());
+         }
+      }
+      this.renderPageItems(viewer, inventory);
+   }
+
+   private void renderPageItems(Player viewer, Inventory inventory) {
+      List<T> entries = this.safeEntries(viewer);
+      int totalPages = this.totalPages(entries);
+      this.currentPage = sanitizePage(this.currentPage, totalPages);
+      int start = this.currentPage * this.pageSlots.size();
+      int end = Math.min(start + this.pageSlots.size(), entries.size());
+      for (int index = start; index < end; index++) {
+         int pageIndex = index - start;
+         ItemStack item = this.itemRenderer.apply(viewer, entries.get(index));
+         if (item != null) {
+            inventory.setItem(this.pageSlots.get(pageIndex), item.clone());
+         }
+      }
+   }
+
    private List<T> safeEntries(Player viewer) {
       List<T> entries = this.entriesProvider.apply(viewer);
       return entries == null ? List.of() : entries;
@@ -159,6 +195,7 @@ public final class PaginatedGuiMenu<T> implements GuiMenu {
       private int nextPageSlot = -1;
       private BiFunction<Integer, Integer, ItemStack> nextPageItem;
       private int initialPage;
+      private boolean liveRefresh;
 
       private Builder(Component title, int size) {
          this.title = title;
@@ -205,6 +242,11 @@ public final class PaginatedGuiMenu<T> implements GuiMenu {
 
       public PaginatedGuiMenu.Builder<T> initialPage(int page) {
          this.initialPage = page;
+         return this;
+      }
+
+      public PaginatedGuiMenu.Builder<T> liveRefresh(boolean enabled) {
+         this.liveRefresh = enabled;
          return this;
       }
 

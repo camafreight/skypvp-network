@@ -37,6 +37,7 @@ public final class BreachLobbyProtection {
         return switch (instance.state()) {
             case ENDING, RESETTING -> true;
             case ACTIVE -> instance.isSpectating(playerId) || instance.isPendingJoin(playerId);
+            case TOXIC -> instance.isSpectating(playerId) || instance.isPendingJoin(playerId);
             case WAITING, STARTING -> true;
         };
     }

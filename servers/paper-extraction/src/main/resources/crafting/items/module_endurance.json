@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_endurance",
+  "displayName": "Endurance Module",
+  "moduleEffects": [
+    {"label": "12% Stamina Pool", "positive": true},
+    {"label": "4% Movement Speed", "positive": false}
+  ]
+}

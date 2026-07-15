@@ -61,6 +61,14 @@ public final class SkyPvPPlaceholderSupport {
             return resolvePartyAbsent(key);
         }
 
+        if (key.startsWith("navigator.") || key.startsWith("navigator_")
+                || key.startsWith("lobby.") || key.startsWith("lobby_")) {
+            if (offlinePlayer instanceof Player player && player.isOnline()) {
+                return NavigatorPlaceholderResolver.resolve(plugin, player, key);
+            }
+            return NavigatorPlaceholderResolver.resolve(plugin, null, key);
+        }
+
         if (offlinePlayer == null || !offlinePlayer.isOnline() || !(offlinePlayer.getPlayer() instanceof Player player)) {
             return resolveServerOnly(plugin, key);
         }
@@ -243,6 +251,21 @@ public final class SkyPvPPlaceholderSupport {
             case "lobby_player_state" -> "lobby.player_state";
             case "lobby_queue_target" -> "lobby.queue_target";
             case "lobby_player_line" -> "lobby.player_line";
+            case "navigator_lobby_servers" -> "navigator.lobby.servers";
+            case "navigator_lobby_players" -> "navigator.lobby.players";
+            case "navigator_lobby_capacity" -> "navigator.lobby.capacity";
+            case "navigator_lobby_capacity_label" -> "navigator.lobby.capacity_label";
+            case "navigator_lobby_status_line" -> "navigator.lobby.status_line";
+            case "navigator_extraction_servers" -> "navigator.extraction.servers";
+            case "navigator_extraction_players" -> "navigator.extraction.players";
+            case "navigator_extraction_status_line" -> "navigator.extraction.status_line";
+            case "navigator_breach_active_instances" -> "navigator.breach.active_instances";
+            case "navigator_breach_open_slots" -> "navigator.breach.open_slots";
+            case "navigator_breach_queued_players" -> "navigator.breach.queued_players";
+            case "navigator_breach_raid_players" -> "navigator.breach.raid_players";
+            case "navigator_breach_active_maps" -> "navigator.breach.active_maps";
+            case "navigator_breach_status_line" -> "navigator.breach.status_line";
+            case "navigator_breach_instance_count" -> "navigator.breach.instance_count";
             case "chat_channel", "chat_channel_id" -> "chat.channel";
             case "chat_channel_name", "chat_channel_label" -> "chat.channel_name";
             case "chat_format_prefix" -> "chat.format_prefix";
@@ -337,6 +360,10 @@ public final class SkyPvPPlaceholderSupport {
             normalized = normalized.substring(0, podSuffix);
         }
         return titleCase(normalized.replace('_', ' ').replace('-', ' '));
+    }
+
+    public static String compactServerNameForNavigator(String serverId) {
+        return compactServerName(serverId, null);
     }
 
     private static String titleCase(String input) {

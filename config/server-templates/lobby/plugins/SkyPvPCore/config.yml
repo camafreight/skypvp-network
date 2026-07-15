@@ -62,3 +62,18 @@ chat:
       name: "%player_name%"
       suffix: ""
       chat_color: white
+
+resource-pack:
+  # Proxy owns forced pack delivery (ItemAdder-style self-host on Velocity LB).
+  enabled: false
+  force: false
+  url: "${SPVP_RESOURCE_PACK_URL}"
+  sha1: "${SPVP_RESOURCE_PACK_SHA1}"
+  uuid: "a7c3e9f1-5b2d-4e8a-9c1f-0d6b4a8e2f35"
+  prompt: "<gold>SkyPvP</gold> <gray>requires its resource pack for weapons, lasers, and effects."
+  kick-message: "<red>You must accept the SkyPvP resource pack to play."
+  serve-locally: false
+  serve-port: 8765
+  public-host: "${SPVP_RESOURCE_PACK_PUBLIC_HOST}"
+  local-file: "skypvp-core.zip"
+  apply-timeout-seconds: 45

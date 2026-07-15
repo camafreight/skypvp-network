@@ -1,7 +1,6 @@
 package network.skypvp.extraction.listener;
 
 import java.util.Objects;
-import network.skypvp.extraction.gameplay.corpse.BreachPlayerCorpseHolder;
 import network.skypvp.extraction.gameplay.corpse.BreachPlayerCorpseLayout;
 import network.skypvp.extraction.gameplay.corpse.BreachPlayerCorpseService;
 import network.skypvp.extraction.gameplay.corpse.BreachPlayerCorpseService.BreachPlayerCorpseState;
@@ -11,11 +10,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryAction;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -24,6 +18,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 
+/** Corpse world interaction and visibility (loot GUI handled by {@link network.skypvp.paper.gui.GuiManager}). */
 public final class BreachPlayerCorpseListener implements Listener {
 
     private final BreachPlayerCorpseService corpseService;
@@ -52,66 +47,6 @@ public final class BreachPlayerCorpseListener implements Listener {
         }
         event.setCancelled(true);
         this.corpseService.openLoot(event.getPlayer(), state);
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getInventory().getHolder() instanceof BreachPlayerCorpseHolder)) {
-            return;
-        }
-        // Withdrawing (including shift-click) is allowed; only block actions that would deposit items INTO the
-        // corpse so it stays loot-only. The shared backing inventory keeps items conserved, so no duplication.
-        if (isDepositIntoCorpse(event)) {
-            event.setCancelled(true);
-            if (event.getWhoClicked() instanceof Player player) {
-                player.updateInventory();
-            }
-        }
-    }
-
-    private static boolean isDepositIntoCorpse(InventoryClickEvent event) {
-        Inventory top = event.getView().getTopInventory();
-        Inventory clicked = event.getClickedInventory();
-        InventoryAction action = event.getAction();
-        if (action == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
-            // Shift-click from the corpse (top) is a withdraw (allow); from the player inventory it pushes into
-            // the corpse (deposit).
-            return clicked == null || !clicked.equals(top);
-        }
-        if (clicked != null && clicked.equals(top)) {
-            return switch (action) {
-                case PLACE_ALL, PLACE_ONE, PLACE_SOME, SWAP_WITH_CURSOR, HOTBAR_SWAP, HOTBAR_MOVE_AND_READD -> true;
-                default -> false;
-            };
-        }
-        return false;
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onInventoryDrag(InventoryDragEvent event) {
-        if (!(event.getInventory().getHolder() instanceof BreachPlayerCorpseHolder)) {
-            return;
-        }
-        int topSize = event.getView().getTopInventory().getSize();
-        boolean touchesCorpse = event.getRawSlots().stream().anyMatch(slot -> slot < topSize);
-        if (touchesCorpse) {
-            event.setCancelled(true);
-            if (event.getWhoClicked() instanceof Player player) {
-                player.updateInventory();
-            }
-        }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onInventoryClose(InventoryCloseEvent event) {
-        if (!(event.getInventory().getHolder() instanceof BreachPlayerCorpseHolder holder)) {
-            return;
-        }
-        BreachPlayerCorpseState state = this.corpseService.find(holder.corpseId());
-        if (state == null) {
-            return;
-        }
-        this.corpseService.syncClosedInventory(state, event.getInventory());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

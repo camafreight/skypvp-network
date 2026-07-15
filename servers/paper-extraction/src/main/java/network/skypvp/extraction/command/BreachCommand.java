@@ -16,7 +16,8 @@ import org.bukkit.entity.Player;
 
 public final class BreachCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUBCOMMANDS = List.of("play", "leave", "status", "list");
+    private static final List<String> SUBCOMMANDS = List.of("play", "leave", "status", "list", "set");
+    private static final String TIME_SET_PERMISSION = "skypvp.breach.admin";
 
     private final BreachEngine engine;
     private final BreachConfigService configService;
@@ -77,9 +78,56 @@ public final class BreachCommand implements CommandExecutor, TabCompleter {
                     }
                 }
             }
+            case "set" -> handleSetTime(player, args);
             default -> player.sendMessage(ExtractionTexts.miniMessage(player, "extraction.command.unknown_subcommand"));
         }
         return true;
+    }
+
+    /**
+     * Test tool: {@code /breach set <timeLeftSeconds>} jumps the caller's breach clock so
+     * session phases (extraction closings, toxicity, reset) can be exercised on demand.
+     */
+    private void handleSetTime(Player player, String[] args) {
+        if (!player.hasPermission(TIME_SET_PERMISSION) && !player.isOp()) {
+            player.sendMessage(net.kyori.adventure.text.Component.text(
+                    "You lack permission for /breach set.",
+                    net.kyori.adventure.text.format.NamedTextColor.RED));
+            return;
+        }
+        if (args.length < 2) {
+            player.sendMessage(net.kyori.adventure.text.Component.text(
+                    "Usage: /breach set <timeLeftSeconds>",
+                    net.kyori.adventure.text.format.NamedTextColor.RED));
+            return;
+        }
+        int seconds;
+        try {
+            seconds = Integer.parseInt(args[1].trim());
+        } catch (NumberFormatException invalid) {
+            player.sendMessage(net.kyori.adventure.text.Component.text(
+                    "Not a number: " + args[1],
+                    net.kyori.adventure.text.format.NamedTextColor.RED));
+            return;
+        }
+        BreachInstance instance = engine.instanceFor(player).orElse(null);
+        if (instance == null) {
+            player.sendMessage(net.kyori.adventure.text.Component.text(
+                    "You are not in a breach instance.",
+                    net.kyori.adventure.text.format.NamedTextColor.RED));
+            return;
+        }
+        if (instance.debugSetRemainingSeconds(seconds)) {
+            player.sendMessage(net.kyori.adventure.text.Component.text(
+                    "Breach clock set: " + Math.max(0, seconds) + "s remaining. "
+                            + "Zone schedules, HUD, and phase transitions follow on the next engine tick.",
+                    net.kyori.adventure.text.format.NamedTextColor.GREEN));
+        } else {
+            player.sendMessage(net.kyori.adventure.text.Component.text(
+                    "The clock only applies while the breach is ACTIVE (current: "
+                            + instance.state() + ").",
+                    net.kyori.adventure.text.format.NamedTextColor.RED));
+        }
     }
 
     @Override

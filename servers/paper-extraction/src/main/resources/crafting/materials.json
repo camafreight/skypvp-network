@@ -1,0 +1,14 @@
+{
+  "materials": [
+    {"id": "cloth_scrap", "displayName": "Cloth Scrap", "icon": "STRING", "tier": "CORE", "description": "Base fabric — cannot be broken down further."},
+    {"id": "fiber_bundle", "displayName": "Fiber Bundle", "icon": "WHITE_WOOL", "tier": "CORE", "description": "Refined fiber — break down at the Material Refinery."},
+    {"id": "metal_shards", "displayName": "Metal Shards", "icon": "IRON_NUGGET", "tier": "CORE", "description": "Base metal fragments — cannot be broken down further."},
+    {"id": "polymer_sheet", "displayName": "Polymer Sheet", "icon": "PHANTOM_MEMBRANE", "tier": "PROGRESSIVE", "description": "Flexible composite — refinery yields fiber and scrap."},
+    {"id": "alloy_plate", "displayName": "Alloy Plate", "icon": "NETHERITE_SCRAP", "tier": "PROGRESSIVE", "description": "Refined alloy — refinery yields metal shards."},
+    {"id": "capacitor_cell", "displayName": "Capacitor Cell", "icon": "LIGHTNING_ROD", "tier": "PROGRESSIVE", "description": "Shield wiring — refinery yields shards and polymer."},
+    {"id": "aether_resin", "displayName": "Aether Resin", "icon": "HONEYCOMB", "tier": "RARE", "description": "Volatile resin — refinery yields stim and polymer."},
+    {"id": "quantum_gel", "displayName": "Quantum Gel", "icon": "SLIME_BALL", "tier": "EXOTIC", "description": "Top-tier gel — refinery yields resin and capacitors."},
+    {"id": "stim_compound", "displayName": "Stim Compound", "icon": "GLASS_BOTTLE", "tier": "PROGRESSIVE", "description": "Syringe base — refinery yields suture and fiber."},
+    {"id": "field_suture", "displayName": "Field Suture", "icon": "SPIDER_EYE", "tier": "CORE", "description": "Emergency wound closure — base tier."}
+  ]
+}

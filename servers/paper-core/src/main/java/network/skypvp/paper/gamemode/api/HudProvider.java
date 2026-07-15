@@ -24,6 +24,11 @@ public interface HudProvider {
       return Optional.empty();
    }
 
+   /** Optional fake tab-list rows (party roster, etc.). Applied by {@link network.skypvp.paper.service.TabListService}. */
+   default Optional<network.skypvp.paper.tabboard.TabBoardSpec> tabBoard(HudProvider.TabListContext context) {
+      return Optional.empty();
+   }
+
    default Optional<HudProvider.ScoreboardFrame> scoreboard(HudProvider.ScoreboardContext context) {
       return Optional.empty();
    }

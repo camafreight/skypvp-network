@@ -121,11 +121,11 @@ public final class ProxyLimboService implements ProxyHoldService {
    public boolean shouldHoldLogin(Player player) {
       if (!this.available()) {
          return false;
-      } else {
-         return this.maintenanceRegistry.isEnabled() && this.config.limbo.holdPlayersDuringMaintenance && !this.isStaffExempt(player)
-            ? true
-            : this.config.limbo.holdPlayersWhenNoInitialServer && this.routingService.selectBestLoginServer().isEmpty();
       }
+      if (this.maintenanceRegistry.isEnabled() && this.config.limbo.holdPlayersDuringMaintenance && !this.isStaffExempt(player)) {
+         return true;
+      }
+      return this.config.limbo.holdPlayersWhenNoInitialServer && this.routingService.selectBestLoginServer().isEmpty();
    }
 
    @Override

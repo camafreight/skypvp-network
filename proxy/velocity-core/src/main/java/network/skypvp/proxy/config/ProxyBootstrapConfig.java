@@ -23,6 +23,9 @@ public final class ProxyBootstrapConfig {
     public ProxyBootstrapConfig.PostgresProxySettings postgres = new ProxyBootstrapConfig.PostgresProxySettings();
     public ChatModerationSettings chatModeration = ChatModerationSettings.defaults();
     public ProxyBootstrapConfig.VersionCompatibilitySettings versionCompatibility = new ProxyBootstrapConfig.VersionCompatibilitySettings();
+   /** When true, cracked/offline Java UUIDs (v3) are rejected at PreLogin. Bedrock (Floodgate v0) and Mojang (v4) are allowed. */
+   public boolean requireAuthenticatedAccounts = true;
+   public ProxyBootstrapConfig.ResourcePackSettings resourcePack = new ProxyBootstrapConfig.ResourcePackSettings();
    public List<ProxyBootstrapConfig.TrackedBackendServer> backendServers = List.of(
       new ProxyBootstrapConfig.TrackedBackendServer("extraction-1", "EXTRACTION", "extraction", 250, false)
    );
@@ -90,6 +93,71 @@ public final class ProxyBootstrapConfig {
       }
 
       this.versionCompatibility.normalizeDefaults();
+      if (this.resourcePack == null) {
+         this.resourcePack = new ProxyBootstrapConfig.ResourcePackSettings();
+      }
+      this.resourcePack.normalizeDefaults();
+   }
+
+   /**
+    * ItemAdder-style self-host on the public Velocity LoadBalancer.
+    * Minecraft still downloads via HTTP URL; the proxy just hosts the zip.
+    */
+   public static final class ResourcePackSettings {
+      public boolean enabled = true;
+      public boolean force = true;
+      public boolean serveLocally = true;
+      public int servePort = 8765;
+      /** Stable zip URL (query params optional; proxy appends ?h=&lt;sha1&gt; for cache bust). */
+      public String url = "";
+      /** Optional bootstrap SHA1; live value is refreshed from {@link #metaUrl} when set. */
+      public String sha1 = "";
+      /**
+       * JSON metadata URL from skypvp-web, e.g. {@code https://skypvp.gg/api/pack}
+       * or {@code https://skypvp.gg/pack/skypvp-core.meta.json}.
+       */
+      public String metaUrl = "";
+      /** How often to re-fetch meta when {@link #metaUrl} is set (seconds). */
+      public long metaRefreshSeconds = 60L;
+      public String uuid = "a7c3e9f1-5b2d-4e8a-9c1f-0d6b4a8e2f35";
+      public String publicHost = "";
+      public String localFile = "skypvp-core.zip";
+      public String prompt = "<gold>SkyPvP</gold> <gray>requires its resource pack for weapons, lasers, and effects.";
+      public String kickMessage = "<red>You must accept the SkyPvP resource pack to play.";
+      public long applyTimeoutSeconds = 45L;
+
+      public ResourcePackSettings() {
+      }
+
+      public void normalizeDefaults() {
+         if (this.servePort <= 0) {
+            this.servePort = 8765;
+         }
+         if (this.localFile == null || this.localFile.isBlank()) {
+            this.localFile = "skypvp-core.zip";
+         }
+         if (this.applyTimeoutSeconds < 5L) {
+            this.applyTimeoutSeconds = 5L;
+         }
+         if (this.metaRefreshSeconds < 15L) {
+            this.metaRefreshSeconds = 15L;
+         }
+         if (this.url == null) {
+            this.url = "";
+         }
+         if (this.sha1 == null) {
+            this.sha1 = "";
+         }
+         if (this.metaUrl == null) {
+            this.metaUrl = "";
+         }
+         if (this.publicHost == null) {
+            this.publicHost = "";
+         }
+         if (this.uuid == null || this.uuid.isBlank()) {
+            this.uuid = "a7c3e9f1-5b2d-4e8a-9c1f-0d6b4a8e2f35";
+         }
+      }
    }
 
    public static final class LimboSettings {

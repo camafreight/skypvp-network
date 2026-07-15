@@ -144,14 +144,28 @@ public final class BreachSpectatorService {
                 continue;
             }
             this.scheduler.runOnPlayer(viewer, () -> {
-                if (viewer.isOnline()) {
-                    viewer.showPlayer(this.core, spectator);
+                if (!viewer.isOnline()) {
+                    return;
+                }
+                viewer.showPlayer(this.core, spectator);
+                // showPlayer re-lists the player in TAB and drops the hide-vanilla-nametag team.
+                if (this.core.tabBoardService() != null) {
+                    this.core.tabBoardService().rehideRealPlayersIfBoardActive(viewer);
                 }
             });
+        }
+        if (this.core.nametagLibrary() != null && spectator.isOnline()) {
+            this.core.nametagLibrary().resyncTarget(spectator);
+            this.scheduler.runOnPlayerLater(spectator, () -> {
+                if (spectator.isOnline() && this.core.nametagLibrary() != null) {
+                    this.core.nametagLibrary().resyncTarget(spectator);
+                }
+            }, 2L);
         }
     }
 
     private void applySpectatorState(Player player) {
+        BreachPlayerVitality.restore(player);
         // ADVENTURE (not SPECTATOR) so the leave/menu hotbar items still deliver PlayerInteractEvent, and not
         // SURVIVAL so the ghost cannot break blocks.
         player.setGameMode(GameMode.ADVENTURE);
@@ -172,6 +186,7 @@ public final class BreachSpectatorService {
         player.setCollidable(true);
         player.setCanPickupItems(true);
         player.setInvulnerable(false);
+        BreachPlayerVitality.restore(player);
     }
 
     private void applySpectatorHotbar(Player player) {

@@ -14,7 +14,7 @@ public final class LobbyCoreBehaviorProfile implements CoreBehaviorProfile {
 
    public Optional<Boolean> booleanOverride(String key) {
       if ("core.hotbar.enabled".equals(key)) {
-         return Optional.of(true);
+         return Optional.of(false);
       } else if ("core.hud.action-bar.enabled".equals(key)) {
          return Optional.of(true);
       } else if ("core.hud.boss-bar.enabled".equals(key)) {
@@ -42,11 +42,11 @@ public final class LobbyCoreBehaviorProfile implements CoreBehaviorProfile {
 
    public OptionalInt intOverride(String key) {
       if ("core.hud.action-bar.refresh-ticks".equals(key)) {
-         return OptionalInt.of(1);
+         return OptionalInt.of(5);
       } else if ("core.hud.boss-bar.refresh-ticks".equals(key)) {
-         return OptionalInt.of(1);
+         return OptionalInt.of(5);
       } else if ("core.hud.scoreboard.refresh-ticks".equals(key)) {
-         return OptionalInt.of(1);
+         return OptionalInt.of(5);
       } else {
          return "core.tab.refresh.ticks".equals(key) ? OptionalInt.of(20) : OptionalInt.empty();
       }

@@ -63,7 +63,7 @@ public final class HologramRepository {
    }
 
    public CompletableFuture<List<HologramDefinition>> loadAllAsync(String serverId) {
-      String sql = "SELECT id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, parent_id, offset_x, offset_y, offset_z, billboard, scale FROM network_holograms WHERE server_id = ?";
+      String sql = "SELECT id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, parent_id, offset_x, offset_y, offset_z, billboard, scale, background, see_through, shadowed, text_alignment, view_range, \"freeze\" FROM network_holograms WHERE server_id = ?";
       return this.asyncDbExecutor.supply("holo.loadAll", connection -> {
          List<HologramDefinition> rows = new ArrayList<>();
 
@@ -104,6 +104,21 @@ public final class HologramRepository {
                   if (rs.wasNull()) {
                      def.scale = 1.0;
                   }
+                  def.background = rs.getBoolean("background");
+                  def.seeThrough = rs.getBoolean("see_through");
+                  def.shadowed = rs.getBoolean("shadowed");
+                  def.textAlignment = rs.getString("text_alignment");
+                  if (def.textAlignment == null) {
+                     def.textAlignment = "CENTER";
+                  }
+                  def.viewRange = rs.getFloat("view_range");
+                  if (rs.wasNull() || def.viewRange <= 0.0F) {
+                     def.viewRange = 1.0F;
+                  }
+                  def.freeze = rs.getBoolean("freeze");
+                  if (rs.wasNull()) {
+                     def.freeze = true;
+                  }
                   rows.add(def);
                }
             }
@@ -114,7 +129,7 @@ public final class HologramRepository {
    }
 
    public void upsert(String serverId, HologramDefinition def, String createdBy) {
-      String sql = "INSERT INTO network_holograms (id, server_id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, created_by, parent_id, offset_x, offset_y, offset_z, billboard, scale) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id, server_id) DO UPDATE SET lines=EXCLUDED.lines, interactive=EXCLUDED.interactive, hitbox_size=EXCLUDED.hitbox_size, world_name=EXCLUDED.world_name, x=EXCLUDED.x, y=EXCLUDED.y, z=EXCLUDED.z, yaw=EXCLUDED.yaw, pitch=EXCLUDED.pitch, action_type=EXCLUDED.action_type, action_data=EXCLUDED.action_data, created_by=EXCLUDED.created_by, parent_id=EXCLUDED.parent_id, offset_x=EXCLUDED.offset_x, offset_y=EXCLUDED.offset_y, offset_z=EXCLUDED.offset_z, billboard=EXCLUDED.billboard, scale=EXCLUDED.scale";
+      String sql = "INSERT INTO network_holograms (id, server_id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, created_by, parent_id, offset_x, offset_y, offset_z, billboard, scale, background, see_through, shadowed, text_alignment, view_range, \"freeze\") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id, server_id) DO UPDATE SET lines=EXCLUDED.lines, interactive=EXCLUDED.interactive, hitbox_size=EXCLUDED.hitbox_size, world_name=EXCLUDED.world_name, x=EXCLUDED.x, y=EXCLUDED.y, z=EXCLUDED.z, yaw=EXCLUDED.yaw, pitch=EXCLUDED.pitch, action_type=EXCLUDED.action_type, action_data=EXCLUDED.action_data, created_by=EXCLUDED.created_by, parent_id=EXCLUDED.parent_id, offset_x=EXCLUDED.offset_x, offset_y=EXCLUDED.offset_y, offset_z=EXCLUDED.offset_z, billboard=EXCLUDED.billboard, scale=EXCLUDED.scale, background=EXCLUDED.background, see_through=EXCLUDED.see_through, shadowed=EXCLUDED.shadowed, text_alignment=EXCLUDED.text_alignment, view_range=EXCLUDED.view_range, \"freeze\"=EXCLUDED.\"freeze\"";
 
       try {
          this.executeAsync("holo.upsert", connection -> {
@@ -141,6 +156,12 @@ public final class HologramRepository {
                ps.setDouble(18, def.offsetZ);
                ps.setString(19, def.billboard != null ? def.billboard : "CENTER");
                ps.setDouble(20, def.scale);
+               ps.setBoolean(21, def.background);
+               ps.setBoolean(22, def.seeThrough);
+               ps.setBoolean(23, def.shadowed);
+               ps.setString(24, def.textAlignment != null ? def.textAlignment : "CENTER");
+               ps.setFloat(25, def.viewRange > 0.0F ? def.viewRange : 1.0F);
+               ps.setBoolean(26, def.freeze);
                ps.executeUpdate();
             }
 
@@ -178,7 +199,7 @@ public final class HologramRepository {
    }
 
    public CompletableFuture<List<HologramDefinition>> loadAllScopedAsync() {
-      String sql = "SELECT server_id, id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, parent_id, offset_x, offset_y, offset_z, billboard, scale FROM network_holograms ORDER BY server_id, id";
+      String sql = "SELECT server_id, id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, parent_id, offset_x, offset_y, offset_z, billboard, scale, background, see_through, shadowed, text_alignment, view_range, \"freeze\" FROM network_holograms ORDER BY server_id, id";
       return this.asyncDbExecutor.supply("holo.loadAllScoped", connection -> {
          List<HologramDefinition> rows = new ArrayList<>();
 
@@ -212,7 +233,7 @@ public final class HologramRepository {
    }
 
    public CompletableFuture<List<HologramDefinition>> findAllByIdAsync(String hologramId) {
-      String sql = "SELECT server_id, id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, parent_id, offset_x, offset_y, offset_z, billboard, scale FROM network_holograms WHERE id = ?";
+      String sql = "SELECT server_id, id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, parent_id, offset_x, offset_y, offset_z, billboard, scale, background, see_through, shadowed, text_alignment, view_range, \"freeze\" FROM network_holograms WHERE id = ?";
       return this.asyncDbExecutor.supply("holo.findAllById", connection -> {
          List<HologramDefinition> rows = new ArrayList<>();
 
@@ -289,7 +310,7 @@ public final class HologramRepository {
    }
 
    private List<HologramDefinition> loadAll(java.sql.Connection connection, String serverId) throws Exception {
-      String sql = "SELECT server_id, id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, parent_id, offset_x, offset_y, offset_z, billboard, scale FROM network_holograms WHERE server_id = ?";
+      String sql = "SELECT server_id, id, lines, interactive, hitbox_size, world_name, x, y, z, yaw, pitch, action_type, action_data, parent_id, offset_x, offset_y, offset_z, billboard, scale, background, see_through, shadowed, text_alignment, view_range, \"freeze\" FROM network_holograms WHERE server_id = ?";
       List<HologramDefinition> rows = new ArrayList<>();
 
       try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -367,6 +388,21 @@ public final class HologramRepository {
       def.scale = rs.getDouble("scale");
       if (rs.wasNull()) {
          def.scale = 1.0;
+      }
+      def.background = rs.getBoolean("background");
+      def.seeThrough = rs.getBoolean("see_through");
+      def.shadowed = rs.getBoolean("shadowed");
+      def.textAlignment = rs.getString("text_alignment");
+      if (def.textAlignment == null) {
+         def.textAlignment = "CENTER";
+      }
+      def.viewRange = rs.getFloat("view_range");
+      if (rs.wasNull() || def.viewRange <= 0.0F) {
+         def.viewRange = 1.0F;
+      }
+      def.freeze = rs.getBoolean("freeze");
+      if (rs.wasNull()) {
+         def.freeze = true;
       }
       return def;
    }

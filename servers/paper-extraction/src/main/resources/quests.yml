@@ -1,0 +1,80 @@
+# SkyPvP Extraction quest dialogues.
+#
+# A quest here is a branching dialogue tree opened by id (from NPC quest actions or code via
+# ExtractionQuestDialogueBridge.open(player, "<quest-id>", anchor)). Progress stages are
+# persisted in extraction_quest_progress; dialogue option picks also land in
+# extraction_quest_dialogue_choices.
+#
+# Structure:
+#   quests.<quest-id>:
+#     npc-name: display name shown as the speaker
+#     start: node id the dialogue opens with
+#     nodes.<node-id>:
+#       lines:   list of spoken lines (typewriter-revealed)
+#       next:    (optional) node to auto-advance to when there are no options
+#       options: (optional) list of player choices
+#         - id:     unique option id (recorded per player when chosen)
+#           text:   what the player says
+#           next:   (optional) node to jump to; omit to end the dialogue
+#           action: (optional) quest action id executed server-side
+#
+# NOTE: "scrapper_intro" is built in code (dynamic tier costs) — do not define it here.
+quests:
+  stranded_pilot:
+    npc-name: "Stranded Pilot"
+    start: intro
+    nodes:
+      intro:
+        lines:
+          - "You're breathing? Good. Most who fall through the breach don't."
+          - "My skiff clipped the temple spire on the way down — the flight recorder is still out in the ruins."
+        options:
+          - id: accept
+            text: "I'll keep an eye out for it."
+            next: accepted
+            action: quest.pilot.accept
+          - id: refuse
+            text: "Not my problem, pilot."
+            next: refused
+            action: quest.pilot.refuse
+      accepted:
+        lines:
+          - "Thank you, raider. It last pinged near the north gardens."
+          - "Extract safe. The Aether doesn't forgive twice."
+      refused:
+        lines:
+          - "Suit yourself. The void keeps what the careless drop."
+      in_progress:
+        lines:
+          - "Still breathing. Good."
+          - "The recorder should still be out in the ruins — north gardens last ping."
+        options:
+          - id: continue
+            text: "I'll keep looking."
+          - id: turn_in_check
+            text: "I found something."
+            next: turn_in_offer
+      turn_in_offer:
+        lines:
+          - "Is that… my black box?"
+        options:
+          - id: hand_over
+            text: "Here — take it."
+            next: turn_in_pending
+            action: quest.pilot.turn_in
+          - id: not_yet
+            text: "Not yet."
+            next: in_progress
+      turn_in_pending:
+        lines:
+          - "Let me check the seals…"
+      turn_in_success:
+        lines:
+          - "That's the one. You just bought me a second chance."
+          - "Take these materials — salvage from the skiff's cargo."
+      turn_in_failed:
+        lines:
+          - "That's not it. Keep searching the ruins."
+      completed:
+        lines:
+          - "Recorder's safe. Clear skies, raider — and thanks again."

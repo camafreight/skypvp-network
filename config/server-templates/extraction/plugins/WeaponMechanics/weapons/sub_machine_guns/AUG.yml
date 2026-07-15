@@ -37,9 +37,8 @@ AUG:
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 118
-    Fully_Automatic_Shots_Per_Second: 13
+    Fully_Automatic_Shots_Per_Second: 0  # SkyPvP PlayerFullAutoService owns cadence (Folia region-safe)
     Spread:
       Base_Spread: 4.1
       Modify_Spread_When:

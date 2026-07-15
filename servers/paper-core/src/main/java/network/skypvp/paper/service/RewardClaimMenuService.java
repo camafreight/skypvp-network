@@ -35,7 +35,7 @@ public final class RewardClaimMenuService implements Listener {
       List<RewardClaimMenuService.PendingRewardEntry> pending = this.pendingByPlayer.getOrDefault(player.getUniqueId(), List.of());
       GuiMenuBuilder menu = GuiMenuBuilder.create(Component.text("Unclaimed Rewards"), 27);
       if (pending.isEmpty()) {
-         menu.button(13, GuiButtonLibrary.infoCard(Material.CHEST, "No pending rewards", lore -> lore.plain("Store and vote rewards appear here.")), viewer -> {
+         menu.button(13, GuiButtonLibrary.infoExclamation("No pending rewards", lore -> lore.plain("Store and vote rewards appear here.")), viewer -> {
          });
       } else {
          int slot = 10;

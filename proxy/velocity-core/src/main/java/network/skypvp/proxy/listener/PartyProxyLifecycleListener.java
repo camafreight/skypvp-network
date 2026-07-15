@@ -14,6 +14,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import network.skypvp.proxy.service.PartyMemberMover;
 import network.skypvp.proxy.service.PartyService;
 import network.skypvp.proxy.service.PartyTransferGate;
+import network.skypvp.proxy.service.BreachPlayMatchmakingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,11 +23,22 @@ public final class PartyProxyLifecycleListener {
    private final ProxyServer proxyServer;
    private final PartyService partyService;
    private final PartyTransferGate transferGate;
+   private final BreachPlayMatchmakingService breachPlayMatchmaking;
 
    public PartyProxyLifecycleListener(ProxyServer proxyServer, PartyService partyService, PartyTransferGate transferGate) {
+      this(proxyServer, partyService, transferGate, null);
+   }
+
+   public PartyProxyLifecycleListener(
+      ProxyServer proxyServer,
+      PartyService partyService,
+      PartyTransferGate transferGate,
+      BreachPlayMatchmakingService breachPlayMatchmaking
+   ) {
       this.proxyServer = proxyServer;
       this.partyService = partyService;
       this.transferGate = transferGate;
+      this.breachPlayMatchmaking = breachPlayMatchmaking;
    }
 
    @Subscribe
@@ -34,56 +46,52 @@ public final class PartyProxyLifecycleListener {
       if (this.transferGate != null) {
          this.transferGate.clear(event.getPlayer().getUniqueId());
       }
-      if (this.partyService != null) {
-         Player disconnectingPlayer = event.getPlayer();
-         UUID playerId = disconnectingPlayer.getUniqueId();
-         String username = disconnectingPlayer.getUsername();
-         Optional<PartyService.PartyState> partyOpt = this.partyService.partyForMember(playerId);
-         if (!partyOpt.isEmpty()) {
+      if (this.breachPlayMatchmaking != null) {
+         this.breachPlayMatchmaking.cancelPendingDeployForMember(event.getPlayer().getUniqueId(), "disconnect");
+      }
+      if (this.partyService == null) {
+         return;
+      }
+      Player disconnectingPlayer = event.getPlayer();
+      UUID playerId = disconnectingPlayer.getUniqueId();
+      String username = disconnectingPlayer.getUsername();
+
+      // A disconnect keeps the player in the party (so a reconnect stays grouped + friendly-fire protected). The
+      // party is only disbanded when the last online member drops, and leadership hands off to an online member
+      // if the leader is the one that disconnected.
+      PartyService.PartyDisconnectResult result = this.partyService.handleDisconnect(this.proxyServer, playerId);
+      switch (result.outcome()) {
+         case NONE -> {
+         }
+         case DISBANDED -> logger.info("Party disbanded: '{}' was the last online member", username);
+         case KEPT -> {
+            Optional<PartyService.PartyState> partyOpt = this.partyService.partyForMember(playerId);
+            if (partyOpt.isEmpty()) {
+               return;
+            }
             PartyService.PartyState party = partyOpt.get();
-            boolean wasLeader = party.leaderId().equals(playerId);
-            int memberCountBefore = party.members().size();
-            PartyService.PartyActionResult result = this.partyService.leave(playerId);
-            if (!result.success()) {
-               logger.debug("Player '{}' leave failed: {}", username, result.message());
-            } else if (result.party() == null) {
-               logger.info("Party disbanded: '{}' was {}the only member (party had {} members)", username, wasLeader ? "leader and " : "", memberCountBefore);
-            } else {
-               PartyService.PartyState updatedParty = result.party();
-               if (wasLeader) {
-                  Optional<Player> newLeader = this.proxyServer.getPlayer(updatedParty.leaderId());
-                  String newLeaderName = newLeader.<String>map(Player::getUsername).orElse("Unknown");
-                  logger.info("Party leadership transferred: '{}' (leader) left party, leadership passed to '{}'", username, newLeaderName);
+            String newLeaderName = result.newLeaderId() == null
+               ? null
+               : this.proxyServer.getPlayer(result.newLeaderId()).<String>map(Player::getUsername).orElse("Unknown");
+            if (result.wasLeader() && result.newLeaderId() != null) {
+               logger.info("Party leadership handed off: leader '{}' disconnected, '{}' now leading while they are offline", username, newLeaderName);
+            }
 
-                  for (UUID memberId : updatedParty.members()) {
-                     Optional<Player> memberOpt = this.proxyServer.getPlayer(memberId);
-                     if (!memberOpt.isEmpty()) {
-                        Player member = memberOpt.get();
-                        if (memberId.equals(updatedParty.leaderId())) {
-                           member.sendMessage(ServerTextUtil.component("&e" + "You are now the party leader (previous leader " + username + " left)."));
-                        } else {
-                           member.sendMessage(
-                              ServerTextUtil.component("&b" + "Party leader changed: " + newLeaderName + " is now leading. (" + username + " left)")
-                           );
-                        }
-                     }
-                  }
-               } else {
-                  logger.info(
-                     "Player '{}' left party (leader: {})",
-                     username,
-                     this.proxyServer.getPlayer(updatedParty.leaderId()).<String>map(Player::getUsername).orElse("Unknown")
-                  );
-                  Optional<Player> leader = this.proxyServer.getPlayer(updatedParty.leaderId());
-                  String leaderName = leader.<String>map(Player::getUsername).orElse("Unknown");
-
-                  for (UUID memberIdx : updatedParty.members()) {
-                     if (!memberIdx.equals(playerId)) {
-                        Optional<Player> memberOpt = this.proxyServer.getPlayer(memberIdx);
-                        if (!memberOpt.isEmpty()) {
-                           memberOpt.get().sendMessage(ServerTextUtil.component("&7" + username + " left the party."));
-                        }
-                     }
+            for (UUID memberId : party.members()) {
+               if (memberId.equals(playerId)) {
+                  continue;
+               }
+               Optional<Player> memberOpt = this.proxyServer.getPlayer(memberId);
+               if (memberOpt.isEmpty()) {
+                  continue;
+               }
+               Player member = memberOpt.get();
+               member.sendMessage(ServerTextUtil.component("&7" + username + " disconnected (still in the party)."));
+               if (result.wasLeader() && result.newLeaderId() != null) {
+                  if (memberId.equals(result.newLeaderId())) {
+                     member.sendMessage(ServerTextUtil.component("&eYou are now the party leader while " + username + " is offline."));
+                  } else {
+                     member.sendMessage(ServerTextUtil.component("&b" + newLeaderName + " is now leading while " + username + " is offline."));
                   }
                }
             }
@@ -93,5 +101,11 @@ public final class PartyProxyLifecycleListener {
 
    @Subscribe
    public void onServerConnected(ServerConnectedEvent event) {
+      if (this.breachPlayMatchmaking != null) {
+         this.breachPlayMatchmaking.completeDeployForMember(
+            event.getPlayer().getUniqueId(),
+            event.getServer().getServerInfo().getName()
+         );
+      }
    }
 }

@@ -1,0 +1,6 @@
+{
+  "typeId": "extraction:infuse_chestplate",
+  "displayName": "Infuse Chestplate",
+  "defenseMultiplier": 1.0,
+  "notes": "defenseMultiplier scales displayed and applied defense (1.0 = default)."
+}

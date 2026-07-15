@@ -11,6 +11,7 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 public final class CoreHotbarService {
@@ -20,6 +21,11 @@ public final class CoreHotbarService {
    public static final String ACTION_OPEN_MENU = "OPEN_NETWORK_MENU";
    public static final String ACTION_OPEN_SOCIALS = "OPEN_SOCIALS";
    public static final String ACTION_LEAVE_BREACH = "LEAVE_BREACH";
+   public static final String ACTION_OPEN_NAVIGATOR = "OPEN_NAVIGATOR";
+   public static final String ACTION_OPEN_SELECTOR = "OPEN_SELECTOR";
+   public static final String ACTION_OPEN_LOBBY_MINIGAMES = "OPEN_LOBBY_MINIGAMES";
+   public static final String ACTION_OPEN_HELP = "OPEN_HELP";
+   public static final String ACTION_OPEN_PROFILE = "OPEN_PROFILE";
    public static final String SERVER_ITEM_KEY = "server_item";
 
    private final PaperCorePlugin plugin;
@@ -176,6 +182,21 @@ public final class CoreHotbarService {
          return null;
       }
       return item.getItemMeta().getPersistentDataContainer().get(this.actionKey, PersistentDataType.STRING);
+   }
+
+   public void tagServerHotbarItem(ItemMeta meta, String action) {
+      meta.getPersistentDataContainer().set(this.actionKey, PersistentDataType.STRING, action);
+      meta.getPersistentDataContainer().set(this.serverItemKey, PersistentDataType.BYTE, (byte)1);
+   }
+
+   public boolean isCoreNetworkHotbarAction(String action) {
+      if (action == null) {
+         return false;
+      }
+      String normalized = action.toLowerCase(Locale.ROOT);
+      return ACTION_OPEN_MENU.equalsIgnoreCase(normalized)
+         || ACTION_OPEN_SOCIALS.equalsIgnoreCase(normalized)
+         || ACTION_LEAVE_BREACH.equalsIgnoreCase(normalized);
    }
 
    public ItemStack menuItem() {

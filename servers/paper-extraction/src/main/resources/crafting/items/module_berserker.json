@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_berserker",
+  "displayName": "Berserker Module",
+  "moduleEffects": [
+    {"label": "2 Attack Damage", "positive": true},
+    {"label": "8% Defense", "positive": false}
+  ]
+}

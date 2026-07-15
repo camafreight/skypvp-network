@@ -39,7 +39,6 @@ FR_5_56:
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 128
     Selective_Fire:
       Trigger:
@@ -49,7 +48,7 @@ FR_5_56:
       Mechanics:
         - "Sound{sound=block.note_block.hat, pitch=2.0}"
     Delay_Between_Shots: 2
-    Fully_Automatic_Shots_Per_Second: 13
+    Fully_Automatic_Shots_Per_Second: 0  # SkyPvP PlayerFullAutoService owns cadence (Folia region-safe)
     Burst:
       Shots_Per_Burst: 3
       Ticks_Between_Each_Shot: 2

@@ -41,9 +41,8 @@ M4A1:
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 128
-    Fully_Automatic_Shots_Per_Second: 14
+    Fully_Automatic_Shots_Per_Second: 0  # SkyPvP PlayerFullAutoService owns cadence (Folia region-safe)
     Spread:
       Base_Spread: 3.6
       Modify_Spread_When:

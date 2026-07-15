@@ -24,7 +24,7 @@ public final class ExtractionCoreBehaviorProfile implements CoreBehaviorProfile 
       } else if ("core.hud.tab.header-footer.enabled".equals(key)) {
          return Optional.of(false);
       } else if ("core.hud.tab.player-list-name.enabled".equals(key)) {
-         return Optional.of(true);
+         return Optional.of(false);
       } else if ("core.hotbar.extraction-layout".equals(key)) {
          return Optional.of(true);
       } else if ("core.hotbar.lock-enabled".equals(key)) {
@@ -46,11 +46,11 @@ public final class ExtractionCoreBehaviorProfile implements CoreBehaviorProfile 
 
    public OptionalInt intOverride(String key) {
       if ("core.hud.action-bar.refresh-ticks".equals(key)) {
-         return OptionalInt.of(10);
+         return OptionalInt.of(2);
       } else if ("core.hud.boss-bar.refresh-ticks".equals(key)) {
          return OptionalInt.of(20);
       } else if ("core.hud.scoreboard.refresh-ticks".equals(key)) {
-         return OptionalInt.of(40);
+         return OptionalInt.of(5);
       } else {
          return "core.tab.refresh.ticks".equals(key) ? OptionalInt.of(20) : OptionalInt.empty();
       }

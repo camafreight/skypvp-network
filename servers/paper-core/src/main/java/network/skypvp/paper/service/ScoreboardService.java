@@ -34,6 +34,7 @@ public final class ScoreboardService {
    private final Map<UUID, PacketSidebar> packetBoards = new ConcurrentHashMap<>();
    private final Map<UUID, ScoreboardService.ScoreboardSnapshot> lastSnapshots = new ConcurrentHashMap<>();
    private final Map<UUID, Long> pendingSetupAtMillis = new ConcurrentHashMap<>();
+   private final Map<UUID, HudProvider.ScoreboardFrame> dialogueFrames = new ConcurrentHashMap<>();
 
    public ScoreboardService(PaperCorePlugin plugin, RankService rankService) {
       this.plugin = plugin;
@@ -102,6 +103,7 @@ public final class ScoreboardService {
       this.boards.remove(player.getUniqueId());
       this.lastSnapshots.remove(player.getUniqueId());
       this.pendingSetupAtMillis.remove(player.getUniqueId());
+      this.dialogueFrames.remove(player.getUniqueId());
       PacketSidebar packetSidebar = this.packetBoards.remove(player.getUniqueId());
       if (packetSidebar != null) {
          packetSidebar.remove(player);
@@ -124,6 +126,19 @@ public final class ScoreboardService {
    }
 
    public void refreshPlayer(Player player) {
+      if (player == null || !player.isOnline()) {
+         return;
+      }
+      var pipeline = this.plugin.clientUpdatePipeline();
+      if (pipeline != null) {
+         pipeline.offerScoreboardRefresh(player);
+         return;
+      }
+      this.flushPlayer(player);
+   }
+
+   /** Pipeline drain entry — snapshot + diff apply on the caller's affinity. */
+   public void flushPlayer(Player player) {
       if (player == null || !player.isOnline()) {
          return;
       }
@@ -177,9 +192,32 @@ public final class ScoreboardService {
       }
    }
 
+   public void setDialogueFrame(UUID playerId, HudProvider.ScoreboardFrame frame) {
+      if (playerId == null || frame == null) {
+         return;
+      }
+      this.dialogueFrames.put(playerId, frame);
+   }
+
+   public void clearDialogueFrame(UUID playerId) {
+      if (playerId != null) {
+         this.dialogueFrames.remove(playerId);
+      }
+   }
+
    public ScoreboardService.ScoreboardSnapshot snapshot(Player player) {
       if (!this.plugin.gameModeBehaviorService().booleanValue("core.hud.scoreboard.enabled", true)) {
          return new ScoreboardService.ScoreboardSnapshot("disabled", Component.text(""), List.of(), false, false);
+      }
+      HudProvider.ScoreboardFrame dialogue = this.dialogueFrames.get(player.getUniqueId());
+      if (dialogue != null) {
+         return new ScoreboardService.ScoreboardSnapshot(
+                 "quest-dialogue",
+                 dialogue.title(),
+                 dialogue.lines(),
+                 true,
+                 true
+         );
       } else {
          RankRecord rank = this.rankService != null ? this.rankService.getCached(player.getUniqueId()) : RankRecord.DEFAULT;
          Optional<HudProvider.ScoreboardFrame> resolvedFrame = this.plugin

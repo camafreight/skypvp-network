@@ -20,7 +20,7 @@ MG34:
       Deny_Use_In_Crafting: true
     Weapon_Get_Mechanics:
       - "Sound{sound=item.armor.equip_chain, pitch=0.75, listeners=Source{}}"
-    Weapon_Equip_Delay: 40
+    Weapon_Equip_Delay: 20
     Cancel:
       Drop_Item: true
       Arm_Swing_Animation: true
@@ -37,9 +37,8 @@ MG34:
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 125
-    Fully_Automatic_Shots_Per_Second: 13
+    Fully_Automatic_Shots_Per_Second: 0  # SkyPvP PlayerFullAutoService owns cadence (Folia region-safe)
     Spread:
       Base_Spread: 3.5
       Modify_Spread_When:

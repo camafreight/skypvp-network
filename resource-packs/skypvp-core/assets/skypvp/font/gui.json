@@ -1,0 +1,76 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "skypvp:gui/vault_overlay.png",
+      "height": 222,
+      "ascent": 14,
+      "chars": [
+        "\uE8A0"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:gui/vault_thumb.png",
+      "height": 14,
+      "ascent": -43,
+      "chars": [
+        "\uE8A1"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:gui/vault_thumb.png",
+      "height": 14,
+      "ascent": -50,
+      "chars": [
+        "\uE8A2"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:gui/vault_thumb.png",
+      "height": 14,
+      "ascent": -57,
+      "chars": [
+        "\uE8A3"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:gui/vault_thumb.png",
+      "height": 14,
+      "ascent": -63,
+      "chars": [
+        "\uE8A4"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:gui/vault_thumb.png",
+      "height": 14,
+      "ascent": -70,
+      "chars": [
+        "\uE8A5"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:gui/vault_thumb.png",
+      "height": 14,
+      "ascent": -77,
+      "chars": [
+        "\uE8A6"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:gui/backpack_overlay.png",
+      "height": 222,
+      "ascent": 14,
+      "chars": [
+        "\uE8A7"
+      ]
+    }
+  ]
+}

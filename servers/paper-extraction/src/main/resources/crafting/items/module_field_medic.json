@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_field_medic",
+  "displayName": "Field Medic Module",
+  "moduleEffects": [
+    {"label": "10% Stamina Regen", "positive": true},
+    {"label": "4 Max Health", "positive": true}
+  ]
+}

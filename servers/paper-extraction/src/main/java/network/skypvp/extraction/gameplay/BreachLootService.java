@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import network.skypvp.extraction.config.BreachConfigService;
 import network.skypvp.extraction.config.BreachLootEntry;
+import network.skypvp.extraction.gameplay.ExtractionLootFactory;
 import network.skypvp.extraction.gameplay.loot.BreachLootChestDisplayService;
 import network.skypvp.extraction.gameplay.loot.BreachLootChestLayout;
 import network.skypvp.extraction.gameplay.loot.BreachLootChestRegistry;
@@ -49,6 +50,7 @@ public final class BreachLootService {
     private final BreachLootChestRegistry chestRegistry;
     private final BreachLootChestDisplayService chestDisplayService;
     private final Logger logger;
+    private volatile ExtractionLootFactory extractionLoot;
     private final Random random = new Random();
     private final ConcurrentHashMap<String, List<McaChestScanner.BlockPos>> templateChestCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, WorldLootPlan> activePlans = new ConcurrentHashMap<>();
@@ -72,6 +74,10 @@ public final class BreachLootService {
 
     public BreachLootChestRegistry chestRegistry() {
         return chestRegistry;
+    }
+
+    public void bindExtractionLoot(ExtractionLootFactory factory) {
+        this.extractionLoot = factory;
     }
 
     public void warmTemplateCaches() {
@@ -157,6 +163,59 @@ public final class BreachLootService {
             this.activePlans.remove(world.getUID());
             chestRegistry.clearWorld(world);
             chestDisplayService.clearWorld(world);
+        }
+    }
+
+    /**
+     * Force-loads and rolls loot for every planned enhanced chest so a standby breach is matchmaking-ready without
+     * waiting for players to explore the map.
+     */
+    public void forceActivatePlannedLoot(World world, Runnable onComplete) {
+        if (world == null) {
+            if (onComplete != null) {
+                onComplete.run();
+            }
+            return;
+        }
+        WorldLootPlan plan = this.activePlans.get(world.getUID());
+        if (plan == null || plan.spawnsByChunk.isEmpty()) {
+            if (onComplete != null) {
+                onComplete.run();
+            }
+            return;
+        }
+        List<long[]> chunks = new ArrayList<>(plan.spawnsByChunk.size());
+        for (long packed : plan.spawnsByChunk.keySet()) {
+            chunks.add(new long[]{(int) (packed >> 32), (int) packed});
+        }
+        this.logger.info("[Breach] Force-activating " + plan.spawnsByKey.size() + " loot chest(s) across "
+                + chunks.size() + " chunk(s) in '" + world.getName() + "'.");
+        this.forceLoadChunkBatch(world, chunks, 0, () -> {
+            this.activateChunkBatch(world, chunks, 0);
+            if (onComplete != null) {
+                int delayTicks = Math.max(2, (chunks.size() / CHUNK_ACTIVATIONS_PER_TICK) + 2);
+                this.scheduler.runGlobalLater(onComplete, delayTicks);
+            }
+        });
+    }
+
+    private void forceLoadChunkBatch(World world, List<long[]> chunks, int startIndex, Runnable onComplete) {
+        int endIndex = Math.min(startIndex + CHUNK_ACTIVATIONS_PER_TICK, chunks.size());
+        for (int index = startIndex; index < endIndex; index++) {
+            long[] coords = chunks.get(index);
+            int chunkX = (int) coords[0];
+            int chunkZ = (int) coords[1];
+            this.scheduler.runAtChunk(world, chunkX, chunkZ, () -> {
+                Chunk chunk = world.getChunkAt(chunkX, chunkZ);
+                if (!chunk.isLoaded()) {
+                    chunk.load(true);
+                }
+            });
+        }
+        if (endIndex < chunks.size()) {
+            this.scheduler.runGlobalLater(() -> this.forceLoadChunkBatch(world, chunks, endIndex, onComplete), 1L);
+        } else if (onComplete != null) {
+            this.scheduler.runGlobalLater(onComplete, 2L);
         }
     }
 
@@ -438,19 +497,24 @@ public final class BreachLootService {
     private List<ItemStack> rollLoot(String tier) {
         List<BreachLootEntry> table = this.configService.lootTable(tier);
         if (table.isEmpty()) {
+            if (this.extractionLoot != null) {
+                return this.extractionLoot.customItem("medic:bandage_rag", 4)
+                        .map(stack -> List.of(stack))
+                        .orElse(List.of(new ItemStack(Material.BREAD, 4)));
+            }
             return List.of(new ItemStack(Material.BREAD, 4));
         }
 
         List<ItemStack> results = new ArrayList<>();
         for (BreachLootEntry entry : table) {
             if (this.random.nextDouble() <= entry.chance()) {
-                entry.createItemStack(this.weaponMechanicsBridge).ifPresent(results::add);
+                entry.createItemStack(this.weaponMechanicsBridge, this.extractionLoot).ifPresent(results::add);
             }
         }
 
         if (results.isEmpty()) {
             for (BreachLootEntry entry : table) {
-                var stack = entry.createItemStack(this.weaponMechanicsBridge);
+                var stack = entry.createItemStack(this.weaponMechanicsBridge, this.extractionLoot);
                 if (stack.isPresent()) {
                     results.add(stack.get());
                     break;
@@ -459,7 +523,12 @@ public final class BreachLootService {
         }
 
         if (results.isEmpty()) {
-            results.add(new ItemStack(Material.BREAD, 4));
+            if (this.extractionLoot != null) {
+                this.extractionLoot.customItem("medic:bandage_rag", 4)
+                        .ifPresentOrElse(results::add, () -> results.add(new ItemStack(Material.BREAD, 4)));
+            } else {
+                results.add(new ItemStack(Material.BREAD, 4));
+            }
         }
         return results;
     }

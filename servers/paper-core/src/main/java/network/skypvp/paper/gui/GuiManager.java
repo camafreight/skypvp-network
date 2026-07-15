@@ -16,6 +16,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.Event.Result;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -65,6 +66,40 @@ public final class GuiManager implements Listener {
       this.open(viewer, menu, false);
    }
 
+   /** Opens a menu bound to an existing inventory (shared loot containers such as player corpses). */
+   public void openWithInventory(Player viewer, GuiMenu menu, Inventory inventory) {
+      this.openWithInventory(viewer, menu, inventory, false);
+   }
+
+   /** When {@code skipInitialRender} is true, the inventory contents are preserved (already-live shared loot). */
+   public void openWithInventory(Player viewer, GuiMenu menu, Inventory inventory, boolean skipInitialRender) {
+      Deque<GuiMenu> history = new ArrayDeque<>();
+      GuiManager.ActiveGui current = this.activeGuis.get(viewer.getUniqueId());
+      if (current != null) {
+         history.addAll(current.history());
+      }
+
+      GuiManager.ActiveAnvilPrompt prompt = this.activeAnvilPrompts.remove(viewer.getUniqueId());
+      if (prompt != null) {
+         this.clearPromptInventory(prompt.inventory());
+      }
+
+      GuiManager.ActiveGui existing = this.activeGuis.remove(viewer.getUniqueId());
+      if (existing != null) {
+         this.notifyClose(existing, viewer, GuiCloseReason.INVENTORY_REPLACE);
+      }
+
+      if (!skipInitialRender) {
+         menu.onPreOpen(viewer, inventory);
+         menu.render(viewer, inventory);
+      } else {
+         menu.onPreOpen(viewer, inventory);
+      }
+      this.activeGuis.put(viewer.getUniqueId(), new GuiManager.ActiveGui(menu, inventory, history));
+      viewer.openInventory(inventory);
+      menu.onPostOpen(viewer, inventory);
+   }
+
    public void openChild(Player viewer, GuiMenu menu) {
       this.open(viewer, menu, true);
    }
@@ -86,7 +121,9 @@ public final class GuiManager implements Listener {
          GuiManager.ActiveGui active = this.activeGuis.get(viewer.getUniqueId());
          if (active != null && !active.history().isEmpty()) {
             GuiMenu previous = active.history().pop();
-            this.open(viewer, previous, active.history(), false);
+            // Replace the current menu so workstation onClose runs (returns deposited items)
+            // before the parent inventory opens — otherwise anchor items are lost on back.
+            this.open(viewer, previous, active.history(), true);
             return true;
          } else {
             return false;
@@ -106,11 +143,19 @@ public final class GuiManager implements Listener {
       }
    }
 
+   /** Runs {@code task} on the player's region thread after one server tick. */
+   public void runNextTick(Player player, Runnable task) {
+      if (player == null || task == null) {
+         return;
+      }
+      this.scheduler.runOnPlayerLater(player, task, 1L);
+   }
+
    private void ensureAnimationTicker() {
       if (this.animationTask != null && !this.animationTask.isCancelled()) {
          return;
       }
-      this.animationTask = this.scheduler.runGlobalTimer(this::tickAnimations, 1L, 1L);
+      this.animationTask = this.scheduler.runGlobalTimer(this::tickAnimations, 1L, 4L);
    }
 
    private void tickAnimations() {
@@ -123,33 +168,45 @@ public final class GuiManager implements Listener {
       }
 
       boolean anyAnimated = false;
+      long tickMillis = System.currentTimeMillis();
       for (Map.Entry<UUID, GuiManager.ActiveGui> entry : this.activeGuis.entrySet()) {
          Player player = Bukkit.getPlayer(entry.getKey());
          GuiManager.ActiveGui active = entry.getValue();
          if (player == null || !player.isOnline()) {
             continue;
          }
-         if (!(active.menu() instanceof AnimatedGuiMenu animated) || animated.backgroundAnimation() == null) {
+         if (!(active.menu() instanceof AnimatedGuiMenu animatedMenu)) {
+            continue;
+         }
+         boolean background = animatedMenu.backgroundAnimation() != null;
+         boolean dynamicButtons = animatedMenu.hasAnimatedButtons();
+         if (!background && !dynamicButtons) {
             continue;
          }
          anyAnimated = true;
-         active.incrementAnimationTicks();
-         GuiAnimation animation = animated.backgroundAnimation();
-         if (active.animationTicks() < animation.periodTicks()) {
-            continue;
+         if (background) {
+            GuiAnimation animation = animatedMenu.backgroundAnimation();
+            active.incrementAnimationTicks();
+            if (active.animationTicks() >= animation.periodTicks()) {
+               active.resetAnimationTicks();
+               active.advanceAnimationFrame(animation.frameCount());
+            }
          }
-         active.resetAnimationTicks();
-         active.advanceAnimationFrame(animation.frameCount());
          int frame = active.animationFrame();
          this.scheduler.runOnPlayer(player, () -> {
             if (!player.isOnline()) {
                return;
             }
             GuiManager.ActiveGui live = this.activeGuis.get(player.getUniqueId());
-            if (live == null || live.menu() != animated || !live.inventory().equals(player.getOpenInventory().getTopInventory())) {
+            if (live == null || live.menu() != animatedMenu || !live.inventory().equals(player.getOpenInventory().getTopInventory())) {
                return;
             }
-            animated.renderAnimatedFrame(player, live.inventory(), frame);
+            if (background) {
+               animatedMenu.renderAnimatedFrame(player, live.inventory(), frame);
+            }
+            if (dynamicButtons) {
+               animatedMenu.renderAnimatedButtons(player, live.inventory(), tickMillis);
+            }
             player.updateInventory();
          });
       }
@@ -172,6 +229,15 @@ public final class GuiManager implements Listener {
             viewer.closeInventory();
          }
       }
+   }
+
+   /** The menu currently presented to {@code viewer}, if any. */
+   public GuiMenu activeMenu(Player viewer) {
+      if (viewer == null) {
+         return null;
+      }
+      GuiManager.ActiveGui active = this.activeGuis.get(viewer.getUniqueId());
+      return active == null ? null : active.menu();
    }
 
    private void open(Player viewer, GuiMenu menu, boolean pushHistory) {
@@ -206,7 +272,7 @@ public final class GuiManager implements Listener {
       this.activeGuis.put(viewer.getUniqueId(), new GuiManager.ActiveGui(menu, inventory, history));
       viewer.openInventory(inventory);
       menu.onPostOpen(viewer, inventory);
-      if (menu instanceof AnimatedGuiMenu animated && animated.backgroundAnimation() != null) {
+      if (menu instanceof AnimatedGuiMenu animated && (animated.backgroundAnimation() != null || animated.hasAnimatedButtons())) {
          this.ensureAnimationTicker();
       }
    }
@@ -267,33 +333,96 @@ public final class GuiManager implements Listener {
          if (active != null) {
             if (!active.inventory().equals(event.getView().getTopInventory())) {
                this.activeGuis.remove(player.getUniqueId());
+            } else if (active.menu().allowsItemInteraction()) {
+               this.handleInteractiveClick(active, player, event);
             } else {
                event.setCancelled(true);
                event.setResult(Result.DENY);
                int rawSlot = event.getRawSlot();
                int topSize = event.getView().getTopInventory().getSize();
                if (rawSlot >= 0 && rawSlot < topSize) {
-                  GuiClickContext context = new GuiClickContext(this, player, event);
-                  if (!active.menu().lockSlotDuringClick(context) || active.tryAcquire(rawSlot, active.menu().clickDebounceMillis())) {
-                     try {
-                        if (active.menu().onPreClick(context)) {
-                           active.menu().onClick(context);
-                           active.menu().onPostClick(context);
-                           return;
-                        }
-                     } catch (RuntimeException var12) {
-                        this.plugin.getLogger().log(Level.SEVERE, "GUI click handler failed for " + player.getName(), (Throwable)var12);
-                        NetworkSoundCue.UI_BUTTON_FAILURE.play(player);
-                        player.sendMessage(MiniMessage.miniMessage().deserialize("<red>That menu action failed. Please try again.</red>"));
-                        return;
-                     } finally {
-                        active.release(rawSlot);
-                     }
-                  }
+                  this.dispatchMenuClick(active, player, event, rawSlot);
                } else {
                   player.updateInventory();
                }
             }
+         }
+      }
+   }
+
+   /**
+    * Item-interaction routing: block the "collect matching to cursor" vacuum, cancel + delegate top-inventory clicks
+    * to the menu (which drives its own item movement), intercept shift-clicks from the player inventory, and let the
+    * player freely manipulate their own inventory otherwise.
+    */
+   private void handleInteractiveClick(GuiManager.ActiveGui active, Player player, InventoryClickEvent event) {
+      int topSize = event.getView().getTopInventory().getSize();
+      int rawSlot = event.getRawSlot();
+      if (event.getAction() == InventoryAction.COLLECT_TO_CURSOR) {
+         // Always blocked: vanilla collect vacuums matching stacks out of chrome/control slots
+         // (scroll buttons, filler panes), which repaint afterwards — a free item dupe.
+         event.setCancelled(true);
+         event.setResult(Result.DENY);
+         player.updateInventory();
+         return;
+      }
+      if (rawSlot >= 0 && rawSlot < topSize) {
+         if (active.menu().allowsVanillaContentSlot(rawSlot)) {
+            if (active.menu().isBlockedPlayerItem(event.getCurrentItem())
+                    || active.menu().isBlockedPlayerItem(event.getCursor())
+                    || active.menu().isBlockedPlayerItem(this.incomingSwapItem(player, event))) {
+               event.setCancelled(true);
+               event.setResult(Result.DENY);
+               player.updateInventory();
+            }
+            return;
+         }
+         event.setCancelled(true);
+         event.setResult(Result.DENY);
+         this.dispatchMenuClick(active, player, event, rawSlot);
+         return;
+      }
+      if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+         event.setCancelled(true);
+         event.setResult(Result.DENY);
+         GuiClickContext context = new GuiClickContext(this, player, event);
+         try {
+            active.menu().onShiftInsert(context);
+         } catch (RuntimeException ex) {
+            this.plugin.getLogger().log(Level.SEVERE, "GUI shift-insert handler failed for " + player.getName(), ex);
+            NetworkSoundCue.UI_BUTTON_FAILURE.play(player);
+         }
+      }
+   }
+
+   /**
+    * Item entering a vanilla content slot via hotbar number-key or offhand swap — those bypass
+    * the {@code currentItem}/{@code cursor} blocked-item checks.
+    */
+   private ItemStack incomingSwapItem(Player player, InventoryClickEvent event) {
+      if (event.getClick() == org.bukkit.event.inventory.ClickType.NUMBER_KEY && event.getHotbarButton() >= 0) {
+         return player.getInventory().getItem(event.getHotbarButton());
+      }
+      if (event.getClick() == org.bukkit.event.inventory.ClickType.SWAP_OFFHAND) {
+         return player.getInventory().getItemInOffHand();
+      }
+      return null;
+   }
+
+   private void dispatchMenuClick(GuiManager.ActiveGui active, Player player, InventoryClickEvent event, int rawSlot) {
+      GuiClickContext context = new GuiClickContext(this, player, event);
+      if (!active.menu().lockSlotDuringClick(context) || active.tryAcquire(rawSlot, active.menu().clickDebounceMillis())) {
+         try {
+            if (active.menu().onPreClick(context)) {
+               active.menu().onClick(context);
+               active.menu().onPostClick(context);
+            }
+         } catch (RuntimeException ex) {
+            this.plugin.getLogger().log(Level.SEVERE, "GUI click handler failed for " + player.getName(), (Throwable)ex);
+            NetworkSoundCue.UI_BUTTON_FAILURE.play(player);
+            player.sendMessage(MiniMessage.miniMessage().deserialize("<red>That menu action failed. Please try again.</red>"));
+         } finally {
+            active.release(rawSlot);
          }
       }
    }
@@ -311,6 +440,16 @@ public final class GuiManager implements Listener {
                   this.updatePromptResult(prompt, var5, event);
                }
             }
+         }
+      }
+   }
+
+   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+   public void onDragMonitor(InventoryDragEvent event) {
+      if (event.getWhoClicked() instanceof Player player) {
+         GuiManager.ActiveGui active = this.activeGuis.get(player.getUniqueId());
+         if (active != null && active.inventory().equals(event.getView().getTopInventory())) {
+            active.menu().onPostDrag(player);
          }
       }
    }
@@ -336,6 +475,43 @@ public final class GuiManager implements Listener {
          if (active != null) {
             if (!active.inventory().equals(event.getView().getTopInventory())) {
                this.activeGuis.remove(player.getUniqueId());
+            } else if (active.menu().allowsItemInteraction()) {
+               int topSize = event.getView().getTopInventory().getSize();
+               if (active.menu() instanceof GuiBulkStorageMenu bulkMenu) {
+                  boolean touchesTop = false;
+                  for (int rawSlot : event.getRawSlots()) {
+                     if (rawSlot >= 0 && rawSlot < topSize) {
+                        touchesTop = true;
+                        break;
+                     }
+                  }
+                  if (!touchesTop) {
+                     return;
+                  }
+                  event.setCancelled(true);
+                  event.setResult(Result.DENY);
+                  bulkMenu.handleDragDeposit(this, player, event);
+                  player.updateInventory();
+                  return;
+               }
+               if (!active.menu().allowsDepositToTop()) {
+                  for (var entry : event.getNewItems().entrySet()) {
+                     if (entry.getKey() < topSize) {
+                        event.setCancelled(true);
+                        event.setResult(Result.DENY);
+                        player.updateInventory();
+                        return;
+                     }
+                  }
+               }
+               for (int slot : event.getRawSlots()) {
+                  if (slot < topSize && !active.menu().allowsVanillaContentSlot(slot)) {
+                     event.setCancelled(true);
+                     event.setResult(Result.DENY);
+                     player.updateInventory();
+                     return;
+                  }
+               }
             } else {
                event.setCancelled(true);
                event.setResult(Result.DENY);
@@ -397,6 +573,32 @@ public final class GuiManager implements Listener {
    public void onInventoryClickMonitor(InventoryClickEvent event) {
       if (event.getWhoClicked() instanceof Player player) {
          this.feedbackService.sync(player);
+      }
+   }
+
+   /** Sync vault-style vanilla content slots into holder state after the client applies the click. */
+   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+   public void onInventoryClickMonitorSync(InventoryClickEvent event) {
+      if (!(event.getWhoClicked() instanceof Player player)) {
+         return;
+      }
+      GuiManager.ActiveGui active = this.activeGuis.get(player.getUniqueId());
+      if (active == null || !active.inventory().equals(event.getView().getTopInventory())) {
+         return;
+      }
+      if (!active.menu().allowsItemInteraction()) {
+         return;
+      }
+      int rawSlot = event.getRawSlot();
+      int topSize = event.getView().getTopInventory().getSize();
+      if (rawSlot < 0 || rawSlot >= topSize || !active.menu().allowsVanillaContentSlot(rawSlot)) {
+         return;
+      }
+      GuiClickContext context = new GuiClickContext(this, player, event);
+      try {
+         active.menu().onPostClick(context);
+      } catch (RuntimeException ex) {
+         this.plugin.getLogger().log(Level.WARNING, "GUI post-click sync failed for " + player.getName(), ex);
       }
    }
 

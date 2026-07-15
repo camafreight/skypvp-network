@@ -3,6 +3,7 @@ package network.skypvp.paper.gui;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
@@ -13,6 +14,7 @@ public final class GuiMenuBuilder {
    private final Component title;
    private final int size;
    private final Map<Integer, GuiMenuBuilder.GuiButton> buttons = new HashMap<>();
+   private final Map<Integer, GuiMenuBuilder.AnimatedGuiButton> animatedButtons = new HashMap<>();
    private ItemStack fillItem;
    private GuiAnimation backgroundAnimation;
 
@@ -36,6 +38,17 @@ public final class GuiMenuBuilder {
       }
    }
 
+   public GuiMenuBuilder animatedButton(int slot, BiFunction<Player, Long, ItemStack> itemSupplier, Consumer<GuiClickContext> handler) {
+      if (slot < 0 || slot >= this.size) {
+         throw new IllegalArgumentException("Slot out of range: " + slot);
+      } else if (itemSupplier == null) {
+         throw new IllegalArgumentException("Animated item supplier cannot be null");
+      } else {
+         this.animatedButtons.put(slot, new GuiMenuBuilder.AnimatedGuiButton(itemSupplier, handler));
+         return this;
+      }
+   }
+
    public GuiMenuBuilder fill(ItemStack item) {
       this.fillItem = item;
       return this;
@@ -55,6 +68,7 @@ public final class GuiMenuBuilder {
          this.title,
          this.size,
          Map.copyOf(this.buttons),
+         Map.copyOf(this.animatedButtons),
          this.fillItem == null ? null : this.fillItem.clone(),
          this.backgroundAnimation
       );
@@ -64,6 +78,7 @@ public final class GuiMenuBuilder {
       Component title,
       int size,
       Map<Integer, GuiMenuBuilder.GuiButton> buttons,
+      Map<Integer, GuiMenuBuilder.AnimatedGuiButton> animatedButtons,
       ItemStack fillItem,
       GuiAnimation backgroundAnimation
    ) implements AnimatedGuiMenu {
@@ -73,11 +88,16 @@ public final class GuiMenuBuilder {
       }
 
       @Override
-      public void render(Player viewer, Inventory inventory) {
-         this.renderFrame(viewer, inventory, 0);
+      public boolean hasAnimatedButtons() {
+         return !this.animatedButtons.isEmpty();
       }
 
-      private void renderFrame(Player viewer, Inventory inventory, int frameIndex) {
+      @Override
+      public void render(Player viewer, Inventory inventory) {
+         this.renderFrame(viewer, inventory, 0, System.currentTimeMillis());
+      }
+
+      private void renderFrame(Player viewer, Inventory inventory, int frameIndex, long tickMillis) {
          inventory.clear();
          if (this.backgroundAnimation != null) {
             this.backgroundAnimation.apply(inventory, frameIndex);
@@ -90,6 +110,7 @@ public final class GuiMenuBuilder {
          for (Entry<Integer, GuiMenuBuilder.GuiButton> entry : this.buttons.entrySet()) {
             inventory.setItem(entry.getKey(), entry.getValue().item().clone());
          }
+         this.renderAnimatedButtons(viewer, inventory, tickMillis);
       }
 
       @Override
@@ -101,10 +122,24 @@ public final class GuiMenuBuilder {
          for (Entry<Integer, GuiMenuBuilder.GuiButton> entry : this.buttons.entrySet()) {
             inventory.setItem(entry.getKey(), entry.getValue().item().clone());
          }
+         this.renderAnimatedButtons(viewer, inventory, System.currentTimeMillis());
+      }
+
+      @Override
+      public void renderAnimatedButtons(Player viewer, Inventory inventory, long tickMillis) {
+         for (Entry<Integer, GuiMenuBuilder.AnimatedGuiButton> entry : this.animatedButtons.entrySet()) {
+            ItemStack item = entry.getValue().itemSupplier().apply(viewer, tickMillis);
+            inventory.setItem(entry.getKey(), item == null ? null : item.clone());
+         }
       }
 
       @Override
       public void onClick(GuiClickContext context) {
+         GuiMenuBuilder.AnimatedGuiButton animated = this.animatedButtons.get(context.rawSlot());
+         if (animated != null && animated.handler() != null) {
+            animated.handler().accept(context);
+            return;
+         }
          GuiMenuBuilder.GuiButton button = this.buttons.get(context.rawSlot());
          if (button != null && button.handler() != null) {
             button.handler().accept(context);
@@ -113,5 +148,8 @@ public final class GuiMenuBuilder {
    }
 
    private static record GuiButton(ItemStack item, Consumer<GuiClickContext> handler) {
+   }
+
+   private static record AnimatedGuiButton(BiFunction<Player, Long, ItemStack> itemSupplier, Consumer<GuiClickContext> handler) {
    }
 }

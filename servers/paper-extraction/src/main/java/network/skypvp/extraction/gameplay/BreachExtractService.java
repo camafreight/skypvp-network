@@ -11,23 +11,34 @@ import network.skypvp.extraction.engine.BreachEngine;
 import network.skypvp.extraction.engine.BreachInstance;
 import network.skypvp.extraction.model.BreachState;
 import network.skypvp.extraction.text.ExtractionTexts;
+import network.skypvp.paper.PaperCorePlugin;
+import network.skypvp.paper.platform.PlatformTask;
 import network.skypvp.paper.platform.ServerPlatform;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import network.skypvp.paper.platform.PlatformTask;
 
+/**
+ * Extract-zone dwell timer. Progress feedback uses a dedicated boss bar plus {@link ExtractFeedback}
+ * titles/SFX — it does not override the vitals action-bar HUD.
+ */
 public final class BreachExtractService {
 
+    private final PaperCorePlugin core;
     private final BreachConfigService configService;
     private final ServerPlatform scheduler;
     private final Map<UUID, Long> combatTaggedUntilMillis = new ConcurrentHashMap<>();
     private final Map<UUID, Long> extractStartMillis = new ConcurrentHashMap<>();
-    private final Map<UUID, BossBar> extractBossBars = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> lastCountdownSeconds = new ConcurrentHashMap<>();
     private PlatformTask tickTask;
 
-    public BreachExtractService(BreachConfigService configService, ServerPlatform scheduler) {
+    public BreachExtractService(
+            PaperCorePlugin core,
+            BreachConfigService configService,
+            ServerPlatform scheduler
+    ) {
+        this.core = Objects.requireNonNull(core, "core");
         this.configService = Objects.requireNonNull(configService, "configService");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
     }
@@ -44,14 +55,8 @@ public final class BreachExtractService {
             tickTask.cancel();
             tickTask = null;
         }
-        for (Map.Entry<UUID, BossBar> entry : extractBossBars.entrySet()) {
-            Player player = pluginPlayer(entry.getKey());
-            if (player != null) {
-                player.hideBossBar(entry.getValue());
-            }
-        }
-        extractBossBars.clear();
         extractStartMillis.clear();
+        lastCountdownSeconds.clear();
         combatTaggedUntilMillis.clear();
     }
 
@@ -61,7 +66,7 @@ public final class BreachExtractService {
         }
         UUID playerId = player.getUniqueId();
         extractStartMillis.remove(playerId);
-        hideExtractBossBar(player);
+        lastCountdownSeconds.remove(playerId);
     }
 
     /** Removes the combat-log tag, e.g. after a player is eliminated so the ghost is no longer "in combat". */
@@ -79,7 +84,7 @@ public final class BreachExtractService {
         long until = System.currentTimeMillis() + configService.combatTagSeconds() * 1000L;
         combatTaggedUntilMillis.put(player.getUniqueId(), until);
         if (extractStartMillis.containsKey(player.getUniqueId())) {
-            cancelExtract(player, "extraction.extract.cancelled.entered_combat");
+            cancelExtract(player, "extraction.extract.cancelled.entered_combat", true);
         }
     }
 
@@ -115,6 +120,32 @@ public final class BreachExtractService {
         return player != null && extractStartMillis.containsKey(player.getUniqueId());
     }
 
+    /**
+     * Dwell progress 0..1, or -1 when the player is not extracting. The extract UI rides
+     * the shared provider boss bar ({@code BreachHudProvider#bossBar}); this service no
+     * longer shows a bar of its own — the two bars used to stack and shoved the balance
+     * readout aside.
+     */
+    public float extractProgress(Player player) {
+        Long start = player == null ? null : extractStartMillis.get(player.getUniqueId());
+        if (start == null) {
+            return -1.0F;
+        }
+        long dwellMillis = Math.max(1L, configService.extractDwellSeconds() * 1000L);
+        return Math.max(0.0F, Math.min(1.0F, (System.currentTimeMillis() - start) / (float) dwellMillis));
+    }
+
+    /** Seconds until extraction completes, or 0 when not extracting. */
+    public int extractRemainingSeconds(Player player) {
+        Long start = player == null ? null : extractStartMillis.get(player.getUniqueId());
+        if (start == null) {
+            return 0;
+        }
+        long dwellMillis = Math.max(1L, configService.extractDwellSeconds() * 1000L);
+        long remaining = dwellMillis - (System.currentTimeMillis() - start);
+        return Math.max(0, (int) Math.ceil(remaining / 1000.0));
+    }
+
     public void onMovedInExtractZone(Player player, BreachInstance instance) {
         if (player == null || instance == null) {
             return;
@@ -123,18 +154,26 @@ public final class BreachExtractService {
             clearPlayer(player);
             return;
         }
-        if (isCombatTagged(player)) {
-            extractStartMillis.remove(player.getUniqueId());
-            hideExtractBossBar(player);
-            int tagSeconds = combatTagRemainingSeconds(player);
-            player.sendActionBar(ExtractionTexts.miniMessage(
-                    player,
-                    "extraction.extract.actionbar.combat_tagged",
-                    tagSeconds
-            ));
+        if (!instance.isInOpenExtractZone(player.getLocation())) {
+            boolean wasExtracting = extractStartMillis.remove(player.getUniqueId()) != null;
+            lastCountdownSeconds.remove(player.getUniqueId());
+            if (wasExtracting) {
+                ExtractFeedback.cancelled(core, player, "extraction.title.extract_cancelled_zone_closed");
+            }
             return;
         }
-        extractStartMillis.putIfAbsent(player.getUniqueId(), System.currentTimeMillis());
+        if (isCombatTagged(player)) {
+            extractStartMillis.remove(player.getUniqueId());
+            lastCountdownSeconds.remove(player.getUniqueId());
+            return;
+        }
+        Long previous = extractStartMillis.putIfAbsent(player.getUniqueId(), System.currentTimeMillis());
+        if (previous == null) {
+            ExtractFeedback.entered(core, scheduler, player);
+            int dwellSeconds = Math.max(1, configService.extractDwellSeconds());
+            lastCountdownSeconds.put(player.getUniqueId(), dwellSeconds);
+            ExtractFeedback.countdownSecond(core, scheduler, player, dwellSeconds);
+        }
     }
 
     public void onLeftExtractZone(Player player) {
@@ -142,12 +181,13 @@ public final class BreachExtractService {
             return;
         }
         if (extractStartMillis.remove(player.getUniqueId()) != null) {
-            hideExtractBossBar(player);
-            player.sendActionBar(ExtractionTexts.miniMessage(player, "extraction.extract.actionbar.left_zone"));
+            lastCountdownSeconds.remove(player.getUniqueId());
+            ExtractFeedback.leftZone(core, player);
         }
     }
 
     private void tick(BreachEngine engine) {
+        this.scanExtractZoneEntries(engine);
         if (extractStartMillis.isEmpty()) {
             return;
         }
@@ -162,8 +202,44 @@ public final class BreachExtractService {
             if (world == null) {
                 continue;
             }
-            Location anchor = world.getSpawnLocation();
-            this.scheduler.runAtLocation(anchor, () -> tickInstanceExtracts(engine, instance, now, dwellMillis));
+            // Coordination across all raiders (they span many regions): global thread, with
+            // per-player mutations dispatched via runOnPlayer inside. The old spawn-anchor hop
+            // added a scheduling bounce and loaded the busiest region with map-wide scans.
+            tickInstanceExtracts(engine, instance, now, dwellMillis);
+        }
+    }
+
+    /**
+     * Starts extraction for raiders already standing in the extract zone when their combat tag expires (movement is
+     * not required). Idempotent via {@link #onMovedInExtractZone}'s {@code putIfAbsent}.
+     */
+    private void scanExtractZoneEntries(BreachEngine engine) {
+        for (BreachInstance instance : engine.activeInstances()) {
+            if (instance.state() != BreachState.ACTIVE) {
+                continue;
+            }
+            World world = instance.world();
+            if (world == null) {
+                continue;
+            }
+            // Same as tickInstanceExtracts: tolerated reads + runOnPlayer dispatch — no region hop.
+            this.scanInstanceExtractZoneEntries(instance);
+        }
+    }
+
+    private void scanInstanceExtractZoneEntries(BreachInstance instance) {
+        for (UUID playerId : instance.participantsSnapshot()) {
+            if (instance.hasExtracted(playerId) || extractStartMillis.containsKey(playerId)) {
+                continue;
+            }
+            Player player = pluginPlayer(playerId);
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            if (!instance.isInOpenExtractZone(player.getLocation()) || isCombatTagged(player)) {
+                continue;
+            }
+            this.scheduler.runOnPlayer(player, () -> onMovedInExtractZone(player, instance));
         }
     }
 
@@ -175,6 +251,7 @@ public final class BreachExtractService {
             Player player = pluginPlayer(playerId);
             if (player == null || !player.isOnline()) {
                 extractStartMillis.remove(playerId);
+                lastCountdownSeconds.remove(playerId);
                 continue;
             }
             this.scheduler.runOnPlayer(player, () -> this.tickPlayerExtract(engine, instance, player, now, dwellMillis));
@@ -199,68 +276,48 @@ public final class BreachExtractService {
             return;
         }
 
-        if (!instance.isInExtractZone(player.getLocation())) {
+        if (!instance.isInOpenExtractZone(player.getLocation())) {
             onLeftExtractZone(player);
             return;
         }
 
         if (isCombatTagged(player)) {
-            cancelExtract(player, "extraction.extract.cancelled.combat_tagged");
+            cancelExtract(player, "extraction.extract.cancelled.combat_tagged", true);
             return;
         }
 
         long elapsed = now - start;
         if (elapsed >= dwellMillis) {
             extractStartMillis.remove(playerId);
-            hideExtractBossBar(player);
+            lastCountdownSeconds.remove(playerId);
             engine.completeExtract(player, instance);
             return;
         }
 
-        float progress = Math.max(0.0F, Math.min(1.0F, (float) elapsed / dwellMillis));
+        // Boss bar rendering happens in BreachHudProvider#bossBar (single shared bar with
+        // fixed sections); this tick only drives the per-second countdown feedback.
         int remainingSeconds = (int) Math.ceil((dwellMillis - elapsed) / 1000.0);
-        updateExtractUi(player, progress, remainingSeconds);
-    }
-
-    private void updateExtractUi(Player player, float progress, int remainingSeconds) {
-        Component title = ExtractionTexts.miniMessage(
-                player,
-                "extraction.extract.bossbar.extracting",
-                remainingSeconds
-        );
-        BossBar bar = extractBossBars.computeIfAbsent(player.getUniqueId(), ignored -> {
-            BossBar created = BossBar.bossBar(
-                    title,
-                    progress,
-                    BossBar.Color.GREEN,
-                    BossBar.Overlay.PROGRESS
-            );
-            player.showBossBar(created);
-            return created;
-        });
-        bar.name(title);
-        bar.progress(progress);
-        bar.color(BossBar.Color.GREEN);
-
-        player.sendActionBar(ExtractionTexts.miniMessage(
-                player,
-                "extraction.extract.actionbar.extracting",
-                remainingSeconds
-        ));
-    }
-
-    private void cancelExtract(Player player, String catalogKey) {
-        extractStartMillis.remove(player.getUniqueId());
-        hideExtractBossBar(player);
-        if (catalogKey != null && !catalogKey.isBlank()) {
-            player.sendMessage(ExtractionTexts.miniMessage(player, catalogKey));
+        Integer lastShown = lastCountdownSeconds.put(playerId, remainingSeconds);
+        if (lastShown == null || lastShown.intValue() != remainingSeconds) {
+            ExtractFeedback.countdownSecond(core, scheduler, player, remainingSeconds);
         }
     }
 
-    private void hideExtractBossBar(Player player) {
-        BossBar bar = extractBossBars.remove(player.getUniqueId());
-        if (bar != null) {
-            player.hideBossBar(bar);
+    private void cancelExtract(Player player, String chatCatalogKey, boolean withFeedback) {
+        extractStartMillis.remove(player.getUniqueId());
+        lastCountdownSeconds.remove(player.getUniqueId());
+        if (chatCatalogKey != null && !chatCatalogKey.isBlank()) {
+            player.sendMessage(ExtractionTexts.miniMessage(player, chatCatalogKey));
+        }
+        if (withFeedback) {
+            String titleReason = switch (chatCatalogKey == null ? "" : chatCatalogKey) {
+                case "extraction.extract.cancelled.entered_combat" ->
+                        "extraction.title.extract_cancelled_combat";
+                case "extraction.extract.cancelled.combat_tagged" ->
+                        "extraction.title.extract_cancelled_combat";
+                default -> "extraction.title.extract_cancelled_subtitle";
+            };
+            ExtractFeedback.cancelled(core, player, titleReason);
         }
     }
 

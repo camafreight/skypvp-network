@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_anchor",
+  "displayName": "Anchor Module",
+  "moduleEffects": [
+    {"label": "25% Knockback Resistance", "positive": true},
+    {"label": "10% Attack Speed", "positive": false}
+  ]
+}

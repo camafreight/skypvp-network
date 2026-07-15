@@ -2,7 +2,6 @@ package network.skypvp.lobby.listener;
 
 import network.skypvp.shared.ServerTextUtil;
 
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import network.skypvp.lobby.game.LobbyGameManager;
 import network.skypvp.lobby.game.LobbyGameType;
 import network.skypvp.paper.service.BuildProtectionSupport;
@@ -16,12 +15,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.Event;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
+import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
@@ -31,13 +33,15 @@ import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.weather.WeatherChangeEvent;
 
 public final class LobbyWorldGuardListener implements Listener {
-   // $VF: renamed from: MM net.kyori.adventure.text.minimessage.MiniMessage
    private final LobbyRuntimeStateRegistry lobbyStates;
    private final Location safeSpawn;
    private final int voidY;
@@ -73,9 +77,7 @@ public final class LobbyWorldGuardListener implements Listener {
       ignoreCancelled = true
    )
    public void onBreak(BlockBreakEvent event) {
-      if (!this.isBypass(event.getPlayer())) {
-         event.setCancelled(true);
-      }
+      event.setCancelled(true);
    }
 
    @EventHandler(
@@ -83,9 +85,35 @@ public final class LobbyWorldGuardListener implements Listener {
       ignoreCancelled = true
    )
    public void onPlace(BlockPlaceEvent event) {
-      if (!this.isBypass(event.getPlayer())) {
+      event.setCancelled(true);
+   }
+
+   @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+   public void onInteract(PlayerInteractEvent event) {
+      Action action = event.getAction();
+      if (action == Action.PHYSICAL) {
          event.setCancelled(true);
+         return;
       }
+      if ((action == Action.RIGHT_CLICK_BLOCK || action == Action.LEFT_CLICK_BLOCK)
+            && event.getClickedBlock() != null) {
+         event.setUseInteractedBlock(Event.Result.DENY);
+      }
+   }
+
+   @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+   public void onBucketEmpty(PlayerBucketEmptyEvent event) {
+      event.setCancelled(true);
+   }
+
+   @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+   public void onBucketFill(PlayerBucketFillEvent event) {
+      event.setCancelled(true);
+   }
+
+   @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+   public void onSignChange(SignChangeEvent event) {
+      event.setCancelled(true);
    }
 
    @EventHandler(
@@ -93,11 +121,6 @@ public final class LobbyWorldGuardListener implements Listener {
       ignoreCancelled = true
    )
    public void onEntityChangeBlock(EntityChangeBlockEvent event) {
-      if (event.getEntity() instanceof Player player) {
-         if (this.isBypass(player)) {
-            return;
-         }
-      }
       event.setCancelled(true);
    }
 

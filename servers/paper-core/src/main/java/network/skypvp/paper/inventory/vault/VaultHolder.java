@@ -15,6 +15,14 @@ public final class VaultHolder implements InventoryHolder {
     private Inventory inventory;
     private int page;
     private int unlockedRows = VaultSlotAccess.defaultUnlockedRows();
+    /** After the first paint, {@link VaultLayout#render} syncs inventory → holder before re-painting. */
+    private boolean inventoryLive;
+    /**
+     * Set for the synchronous window of a scroll re-open: the replaced menu's close callback
+     * must NOT persist — every scroll click would otherwise fire a concurrent bulk save,
+     * which raced in the DB (duplicate-key aborts + deadlocks on extraction_inventory_slots).
+     */
+    private boolean scrollTransition;
 
     public VaultHolder(UUID playerId, boolean returnToNetworkMenu) {
         this.playerId = playerId;
@@ -45,8 +53,33 @@ public final class VaultHolder implements InventoryHolder {
         this.unlockedRows = VaultSlotAccess.clampUnlockedRows(unlockedRows);
     }
 
+    public void resetInventorySync() {
+        this.inventoryLive = false;
+    }
+
+    public void beginScrollTransition() {
+        this.scrollTransition = true;
+    }
+
+    public void endScrollTransition() {
+        this.scrollTransition = false;
+    }
+
+    public boolean inScrollTransition() {
+        return this.scrollTransition;
+    }
+
     public void bindInventory(Inventory inventory) {
         this.inventory = inventory;
+        this.inventoryLive = false;
+    }
+
+    public boolean inventoryLive() {
+        return this.inventoryLive;
+    }
+
+    public void markInventoryLive() {
+        this.inventoryLive = true;
     }
 
     public void replaceAll(Map<Integer, ItemStack> source) {

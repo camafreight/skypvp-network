@@ -1,0 +1,1 @@
+{"typeId":"extraction:medic_bandage_rag","displayName":"Bandage Rag","blurb":"Slow wrap for light wounds.","coinCost":25,"stats":{"stackSize":8,"healAmount":8.0,"healChunkAmount":2.0,"healChunkIntervalTicks":10,"consumeSeconds":2.0,"useCooldownMillis":2500}}

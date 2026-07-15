@@ -1,0 +1,109 @@
+{
+  "providers": [
+    {
+      "type": "space",
+      "advances": {
+        "\uE850": -1,
+        "\uE851": -2,
+        "\uE852": -3,
+        "\uE853": -4,
+        "\uE854": -8,
+        "\uE855": -16,
+        "\uE856": -32,
+        "\uE857": -64,
+        "\uE858": -128,
+        "\uE859": 1,
+        "\uE85A": 2,
+        "\uE85B": 4,
+        "\uE85C": 8,
+        "\uE85D": 16,
+        "\uE85E": 32,
+        "\uE85F": 64
+      }
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/speech_panel.png",
+      "height": 72,
+      "ascent": 48,
+      "chars": ["\uE900"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/nameplate.png",
+      "height": 64,
+      "ascent": 56,
+      "chars": ["\uE901"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/choice_panel.png",
+      "height": 72,
+      "ascent": 48,
+      "chars": ["\uE902"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/portrait_frame.png",
+      "height": 48,
+      "ascent": 34,
+      "chars": ["\uE910"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/silhouette.png",
+      "height": 48,
+      "ascent": 32,
+      "chars": ["\uE911"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/choice_cursor.png",
+      "height": 48,
+      "ascent": 39,
+      "chars": ["\uE912"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/choice_cursor.png",
+      "height": 48,
+      "ascent": 27,
+      "chars": ["\uE913"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/choice_cursor.png",
+      "height": 48,
+      "ascent": 15,
+      "chars": ["\uE914"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/choice_cursor.png",
+      "height": 48,
+      "ascent": 3,
+      "chars": ["\uE915"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/icon_continue.png",
+      "height": 10,
+      "ascent": -9,
+      "chars": ["\uE920"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/icon_choose.png",
+      "height": 10,
+      "ascent": -9,
+      "chars": ["\uE921"]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:dialogue/icon_leave.png",
+      "height": 10,
+      "ascent": -9,
+      "chars": ["\uE922"]
+    }
+  ]
+}

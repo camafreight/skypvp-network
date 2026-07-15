@@ -81,6 +81,11 @@ public final class GuiClickContext {
       return this.manager;
    }
 
+   /** Schedules a one-time sweep after vanilla shift-double-click deposit bursts. */
+   public void trackShiftDepositSweep(Runnable sweep) {
+      GuiShiftDepositBurst.track(this.viewer, this.manager, sweep);
+   }
+
    public void playSound(NetworkSoundCue cue) {
       if (cue != null) {
          cue.play(this.viewer);

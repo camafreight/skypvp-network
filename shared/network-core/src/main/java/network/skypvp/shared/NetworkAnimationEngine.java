@@ -48,19 +48,8 @@ public final class NetworkAnimationEngine {
         "═══════════════════",
     };
 
-    // ── Server-list MOTD rotating taglines (≤28 visible chars each) ──────────
-    public static final String[] MOTD_TAGLINES = {
-        "Compete · Survive · Explore",
-        "SkyWars · Survival · Events",
-        "Your adventure starts here",
-        "Bedrock + Java welcome!",
-        "New Season — join now!",
-        "store.skypvp.net",
-        "discord.gg/SkyPvP",
-        "Ranks · Coins · Rewards",
-        "Fresh servers · Low ping",
-        "Join 2,000+ players daily",
-    };
+    // ── Server-list MOTD rotating taglines (≤34 visible chars each) ──────────
+    public static final String[] MOTD_TAGLINES = NetworkMotdLibrary.PROMO_TAGLINES;
 
     // ── Maintenance MOTD short suffix (≤22 visible chars) ────────────────────
     public static final String[] MOTD_MAINTENANCE_SHORT = {
@@ -202,9 +191,9 @@ public final class NetworkAnimationEngine {
     //  MOTD tagline
     // ────────────────────────────────────────────────────────────────────────
 
-    /** Returns the current rotating MOTD tagline (changes every ~8 s). */
+    /** Returns a static promo tagline index for MOTD refresh variety (not animated on screen). */
     public static String motdTagline(long tick) {
-        return MOTD_TAGLINES[frameIndex(tick, MOTD_TAGLINES.length, 8000)];
+        return NetworkMotdLibrary.promoTaglineForRefresh(tick);
     }
 
     /** Returns a short rotating maintenance suffix for the MOTD (changes every ~4 s). */

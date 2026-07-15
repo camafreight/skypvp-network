@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import network.skypvp.proxy.config.ProxyBootstrapConfig;
@@ -21,6 +22,11 @@ import network.skypvp.shared.ServerHeartbeatEvent;
 
 public final class ServerRoutingService {
    private static final long STALE_HEARTBEAT_MILLIS = 30000L;
+   /**
+    * Require joinable=true for this long before routing players. Prevents limbo from releasing on the first
+    * joinable heartbeat while the backend is still settling post-warmup work.
+    */
+   private static final long JOINABLE_STABLE_MILLIS = 10000L;
    private final ProxyServer proxyServer;
    private final NetworkStateRegistry stateRegistry;
    private final ProxyBootstrapConfig config;
@@ -73,6 +79,35 @@ public final class ServerRoutingService {
       }
    }
 
+   /**
+    * Routes a reconnecting breach participant straight back to the extraction pod hosting their session, when that pod
+    * is still healthy. Disconnected stand-ins take priority over offline eliminated spectators.
+    */
+   public Optional<RegisteredServer> selectReconnectServerForBreachRaider(UUID playerId) {
+      if (playerId == null) {
+         return Optional.empty();
+      }
+      Optional<RegisteredServer> disconnected = this.stateRegistry.breachDisconnectedPresence(playerId)
+         .flatMap(snapshot -> this.resolveHealthyExtractionServer(snapshot.serverId()));
+      if (disconnected.isPresent()) {
+         return disconnected;
+      }
+      return this.stateRegistry.breachSpectatorPresence(playerId).flatMap(snapshot -> this.resolveHealthyExtractionServer(snapshot.serverId()));
+   }
+
+   /** @deprecated use {@link #selectReconnectServerForBreachRaider(UUID)} */
+   public Optional<RegisteredServer> selectReconnectServerForAwayRaider(UUID playerId) {
+      return this.selectReconnectServerForBreachRaider(playerId);
+   }
+
+   private Optional<RegisteredServer> resolveHealthyExtractionServer(String serverId) {
+      Optional<ServerRoutingService.ServerRouteStatus> status = this.describeServer(serverId);
+      if (status.isEmpty() || !status.get().isHealthyJoinTarget() || !"EXTRACTION".equalsIgnoreCase(status.get().role())) {
+         return Optional.empty();
+      }
+      return this.proxyServer.getServer(serverId);
+   }
+
    public Optional<RegisteredServer> selectBestLoginServer() {
       return this.bestCandidate(selectBestInitialServerId(this.snapshotStatuses()));
    }
@@ -80,6 +115,18 @@ public final class ServerRoutingService {
    public Optional<RegisteredServer> selectFallback(String excludedServerId) {
       Optional<RegisteredServer> dynamic = this.bestCandidate(selectBestFallbackServerId(this.snapshotStatuses(), excludedServerId));
       return dynamic.isPresent() ? dynamic : this.staticFallback(excludedServerId);
+   }
+
+   /** Prefers same-cluster/role routing (like kick redirects) before generic fallback selection. */
+   public Optional<RegisteredServer> selectDrainTarget(String excludedServerId) {
+      if (excludedServerId != null && !excludedServerId.isBlank()) {
+         Optional<RegisteredServer> queueTarget = this.selectBestTargetForQueue(this.queueKeyForServer(excludedServerId), Set.of(excludedServerId));
+         if (queueTarget.isPresent()) {
+            return queueTarget;
+         }
+      }
+
+      return this.selectFallback(excludedServerId);
    }
 
    public Optional<RegisteredServer> selectBestTargetForQueue(String queueKey, Set<String> excludedServerIds) {
@@ -159,6 +206,143 @@ public final class ServerRoutingService {
          int capacity = snapshot.softCapacity() > 0 ? snapshot.softCapacity() : snapshot.maxPlayers();
          return capacity <= 0 ? 0 : Math.max(0, capacity - snapshot.onlinePlayers());
       }
+   }
+
+   /**
+    * Whether a full party can connect to this backend: pod soft capacity, or (on extraction pods)
+    * any joinable breach instance with enough open slots for the whole group.
+    */
+   public boolean canAdmitPartyToServer(String serverId, int partySize) {
+      if (partySize <= 0) {
+         return true;
+      }
+      if (this.availableSlotsForServer(serverId) >= partySize) {
+         return true;
+      }
+      Optional<ServerRoutingService.ServerRouteStatus> status = this.describeServer(serverId);
+      if (status.isEmpty() || !"EXTRACTION".equalsIgnoreCase(status.get().role())) {
+         return false;
+      }
+      for (network.skypvp.shared.BreachInstanceSnapshot instance : this.stateRegistry.breachInstancesForServer(serverId)) {
+         if (instance != null && instance.joinable() && instance.openSlots() >= partySize) {
+            return true;
+         }
+      }
+      return false;
+   }
+
+   public Optional<ServerRoutingService.BreachInstanceTarget> selectBestBreachInstanceForParty(int partySize, Set<String> excludedServerIds) {
+      return selectBestBreachInstanceForParty(partySize, excludedServerIds, null);
+   }
+
+    /**
+     * Finds a joinable breach instance on any healthy extraction pod with enough open slots for the whole party.
+     * Prefers fuller instances so queued groups consolidate instead of spreading across empty raids.
+     *
+     * @param mapId optional map filter ({@code null}/blank = any map)
+     */
+   public Optional<ServerRoutingService.BreachInstanceTarget> selectBestBreachInstanceForParty(
+         int partySize,
+         Set<String> excludedServerIds,
+         String mapId
+   ) {
+      return selectBestBreachInstanceForParty(partySize, excludedServerIds, mapId, null);
+   }
+
+   /**
+    * Same as {@link #selectBestBreachInstanceForParty(int, Set, String)} but prefers an instance that already hosts
+    * {@code preferredPartyId} when it still has room for the deployable squad.
+    */
+   public Optional<ServerRoutingService.BreachInstanceTarget> selectBestBreachInstanceForParty(
+         int partySize,
+         Set<String> excludedServerIds,
+         String mapId,
+         UUID preferredPartyId
+   ) {
+      if (partySize <= 0) {
+         return Optional.empty();
+      }
+      if (preferredPartyId != null) {
+         Optional<ServerRoutingService.BreachInstanceTarget> partyInstance =
+               this.findBreachInstanceForParty(preferredPartyId, partySize, mapId);
+         if (partyInstance.isPresent()) {
+            return partyInstance;
+         }
+      }
+      return this.rankBreachInstancesForParty(partySize, excludedServerIds, mapId, null).stream().findFirst();
+   }
+
+   /** Finds a joinable breach instance that already hosts the given party. */
+   public Optional<ServerRoutingService.BreachInstanceTarget> findBreachInstanceForParty(
+         UUID partyId,
+         int partySize,
+         String mapId
+   ) {
+      if (partyId == null || partySize <= 0) {
+         return Optional.empty();
+      }
+      return this.rankBreachInstancesForParty(partySize, Set.of(), mapId, partyId).stream().findFirst();
+   }
+
+   private java.util.List<ServerRoutingService.BreachInstanceTarget> rankBreachInstancesForParty(
+         int partySize,
+         Set<String> excludedServerIds,
+         String mapId,
+         UUID preferredPartyId
+   ) {
+      if (partySize <= 0) {
+         return java.util.List.of();
+      }
+      Set<String> excluded = excludedServerIds == null ? Set.of() : excludedServerIds;
+      String normalizedMap = mapId == null || mapId.isBlank() ? null : mapId.trim().toLowerCase(java.util.Locale.ROOT);
+      String preferredPartyKey = preferredPartyId == null ? null : preferredPartyId.toString();
+      record Ranked(ServerRoutingService.BreachInstanceTarget target, double fillRatio, double serverLoad) {
+      }
+      java.util.List<Ranked> candidates = new java.util.ArrayList<>();
+      for (ServerRoutingService.ServerRouteStatus status : this.snapshotStatuses()) {
+         if (!status.isHealthyJoinTarget()
+            || !"EXTRACTION".equalsIgnoreCase(status.role())
+            || excluded.contains(status.serverId())) {
+            continue;
+         }
+         for (network.skypvp.shared.BreachInstanceSnapshot instance : this.stateRegistry.breachInstancesForServer(status.serverId())) {
+            if (instance == null || !instance.joinable() || instance.openSlots() < partySize) {
+               continue;
+            }
+            if (preferredPartyKey != null && (instance.activePartyIds() == null
+                  || instance.activePartyIds().stream().noneMatch(preferredPartyKey::equalsIgnoreCase))) {
+               continue;
+            }
+            if (normalizedMap != null && (instance.mapId() == null
+                  || !normalizedMap.equals(instance.mapId().trim().toLowerCase(java.util.Locale.ROOT)))) {
+               continue;
+            }
+            double fillRatio = instance.maxPlayers() <= 0
+               ? 0.0D
+               : (double)(instance.maxPlayers() - instance.openSlots()) / (double)instance.maxPlayers();
+            candidates.add(new Ranked(
+               new ServerRoutingService.BreachInstanceTarget(
+                  status.serverId(),
+                  instance.instanceId(),
+                  instance.mapId(),
+                  instance.openSlots()
+               ),
+               fillRatio,
+               status.loadRatio()
+            ));
+         }
+      }
+      return candidates.stream()
+         .sorted(
+            Comparator.comparingDouble(Ranked::fillRatio).reversed()
+               .thenComparingDouble(Ranked::serverLoad)
+               .thenComparing(ranked -> ranked.target().serverId())
+         )
+         .map(Ranked::target)
+         .toList();
+   }
+
+   public static record BreachInstanceTarget(String serverId, String instanceId, String mapId, int openSlots) {
    }
 
    public List<ServerRoutingService.ServerRouteStatus> snapshotStatuses() {
@@ -272,6 +456,7 @@ public final class ServerRoutingService {
       } else {
          lifecycleState = joinable ? ServerLifecycleState.READY : ServerLifecycleState.BOOTING;
       }
+      long joinableStableMillis = joinable ? this.stateRegistry.joinableStableMillis(serverId) : 0L;
       return new ServerRoutingService.ServerRouteStatus(
          serverId,
          role,
@@ -291,8 +476,49 @@ public final class ServerRoutingService {
          heartbeat != null ? heartbeat.openBreachSlots() : 0,
          heartbeat != null ? heartbeat.activeBreaches() : 0,
          heartbeat != null ? heartbeat.queuedPlayers() : 0,
-         heartbeat != null ? heartbeat.maxPlayersPerPod() : 0
+         heartbeat != null ? heartbeat.maxPlayersPerPod() : 0,
+         joinableStableMillis
       );
+   }
+
+   /**
+    * Aggregated breach joinability across healthy extraction pods. The autoscaler consumes
+    * this: breach INSTANCE caps saturate long before player-count load does, so when no
+    * instance is accepting players and no pod can provision another one, queued players
+    * would wait forever unless a new pod is opened.
+    */
+   public BreachSaturation breachSaturation() {
+      int joinableInstances = 0;
+      int instanceHeadroom = 0;
+      int queuedPlayers = 0;
+      boolean anyHealthyPod = false;
+      for (ServerRouteStatus status : this.snapshotStatuses()) {
+         if (status.role() == null || !"EXTRACTION".equalsIgnoreCase(status.role()) || !status.isHealthyJoinTarget()) {
+            continue;
+         }
+         anyHealthyPod = true;
+         instanceHeadroom += Math.max(0, status.openBreachSlots());
+         queuedPlayers += Math.max(0, status.queuedPlayers());
+         for (network.skypvp.shared.BreachInstanceSnapshot instance
+               : this.stateRegistry.breachInstancesForServer(status.serverId())) {
+            if (instance.joinable() && instance.openSlots() > 0) {
+               joinableInstances++;
+            }
+         }
+      }
+      return new BreachSaturation(anyHealthyPod, joinableInstances, instanceHeadroom, queuedPlayers);
+   }
+
+   public static record BreachSaturation(
+      boolean anyHealthyPod,
+      int joinableInstances,
+      int instanceHeadroom,
+      int queuedPlayers
+   ) {
+      /** True when the network can neither seat breach players nor provision a new instance. */
+      public boolean saturated() {
+         return this.anyHealthyPod && this.joinableInstances == 0 && this.instanceHeadroom == 0;
+      }
    }
 
    public static record ServerRouteStatus(
@@ -314,10 +540,15 @@ public final class ServerRoutingService {
       int openBreachSlots,
       int activeBreaches,
       int queuedPlayers,
-      int maxPlayersPerPod
+      int maxPlayersPerPod,
+      long joinableStableMillis
    ) {
       public boolean isHealthyJoinTarget() {
-         return this.registered && this.joinable && !this.stale && this.lifecycleState.isRoutable();
+         return this.registered
+            && this.joinable
+            && !this.stale
+            && this.lifecycleState.isRoutable()
+            && this.joinableStableMillis >= JOINABLE_STABLE_MILLIS;
       }
 
       public boolean isEligibleForInitial() {

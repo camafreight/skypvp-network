@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import network.skypvp.paper.PaperCorePlugin;
+import network.skypvp.paper.library.InteractionActionTypes;
 import network.skypvp.paper.library.NpcLibrary;
 import network.skypvp.paper.model.HologramDefinition;
 import network.skypvp.paper.model.NpcDefinition;
@@ -81,8 +82,35 @@ public final class NpcCommand implements CommandExecutor, TabCompleter {
                case "faceplayer":
                   this.handleFacePlayer(player, args);
                   break;
+               case "navigator":
+                  this.handleNavigator(player, args);
+                  break;
                case "scale":
                   this.handleScale(player, args);
+                  break;
+               case "background":
+                  this.handleNpcDisplayBoolean(player, args, "background", (def, v) -> def.hologramBackground = v);
+                  break;
+               case "seethrough":
+                  this.handleNpcDisplayBoolean(player, args, "seethrough", (def, v) -> def.hologramSeeThrough = v);
+                  break;
+               case "shadowed":
+                  this.handleNpcDisplayBoolean(player, args, "shadowed", (def, v) -> def.hologramShadowed = v);
+                  break;
+               case "freeze":
+                  this.handleNpcDisplayBoolean(player, args, "freeze", (def, v) -> def.hologramFreeze = v);
+                  break;
+               case "alignment":
+                  this.handleNpcAlignment(player, args);
+                  break;
+               case "viewrange":
+                  this.handleNpcViewRange(player, args);
+                  break;
+               case "holobillboard":
+                  this.handleNpcHoloBillboard(player, args);
+                  break;
+               case "holoscale":
+                  this.handleNpcHoloScale(player, args);
                   break;
                case "line":
                   this.handleLine(player, args);
@@ -447,7 +475,8 @@ this.plugin.platformScheduler().runGlobal(
 
    private void handleAction(Player player, String[] args) {
       if (args.length < 3) {
-         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc action <id> <NONE|CONNECT|COMMAND|MESSAGE> [data...]<reset>"));
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc action <id> <type> [data...]<reset>"));
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Types: NONE, CONNECT, COMMAND, CONSOLE_COMMAND, PROXY_COMMAND, PROXY_CONSOLE_COMMAND, MESSAGE, OPEN_NETWORK_MENU, MENU<reset>"));
       } else {
          String id = args[1].toLowerCase(Locale.ROOT);
          String actionType = args[2].toUpperCase(Locale.ROOT);
@@ -486,10 +515,26 @@ this.plugin.platformScheduler().runGlobal( () -> player.sendMessage(ServerTextUt
 
    private void handleType(Player player, String[] args) {
       if (args.length < 3) {
-         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc type <id> <entity_type><reset>"));
+         player.sendMessage(ServerTextUtil.miniMessageComponent(
+               "<#888888>Usage: /npc type <id> <entity_type|PLAYER|BLOCK:MATERIAL|CHEST...><reset>"));
       } else {
          String id = args[1].toLowerCase(Locale.ROOT);
-         String entityType = args[2].toUpperCase(Locale.ROOT);
+         String rawType = args[2].trim();
+         org.bukkit.Material blockMaterial = NpcLibrary.resolveBlockMaterial(rawType);
+         String entityType;
+         if (blockMaterial != null) {
+            entityType = "BLOCK:" + blockMaterial.name();
+         } else {
+            try {
+               entityType = org.bukkit.entity.EntityType.valueOf(rawType.toUpperCase(Locale.ROOT)).name();
+            } catch (IllegalArgumentException ex) {
+               player.sendMessage(ServerTextUtil.miniMessageComponent(
+                     "<#FF5555>Unknown type '<white>" + rawType
+                           + "<reset><#FF5555>'. Use an EntityType (VILLAGER, PLAYER) or a block material (CHEST, BLOCK:CHEST).<reset>"));
+               return;
+            }
+         }
+         final String resolvedType = entityType;
          this.plugin.platformScheduler().runAsync(
                () -> {
                   List<NpcDefinition> existing = this.repository.loadAll(this.serverId);
@@ -498,12 +543,12 @@ this.plugin.platformScheduler().runGlobal( () -> player.sendMessage(ServerTextUt
 this.plugin.platformScheduler().runGlobal( () -> player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>NPC '<white>" + id + "<reset><#888888>' not found.<reset>"))
                         );
                   } else {
-                     def.entityType = entityType;
+                     def.entityType = resolvedType;
                      this.repository.upsert(this.serverId, def, player.getName());
                      World w = def.location != null && def.location.world != null ? this.plugin.getServer().getWorld(def.location.world) : player.getWorld();
                      this.npcLibrary.applyAndNotify(w, w == null ? null : this.npcLibrary.resolveLocation(w, def), existing, () ->
                         player.sendMessage(
-                           ServerTextUtil.miniMessageComponent("<#FFD700>NPC <#FFFFFF>" + id + "<reset><#FFD700> type set to <white>" + entityType + "<reset>")
+                           ServerTextUtil.miniMessageComponent("<#FFD700>NPC <#FFFFFF>" + id + "<reset><#FFD700> type set to <white>" + resolvedType + "<reset>")
                         )
                      );
                   }
@@ -642,6 +687,35 @@ this.plugin.platformScheduler().runGlobal( () -> player.sendMessage(ServerTextUt
       }
    }
 
+   private void handleNavigator(Player player, String[] args) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc navigator <id> <true|false><reset>"));
+         return;
+      }
+      String id = args[1].toLowerCase(Locale.ROOT);
+      boolean navigator = Boolean.parseBoolean(args[2]);
+      this.plugin.platformScheduler().runAsync(() -> {
+         List<NpcDefinition> existing = this.repository.loadAll(this.serverId);
+         NpcDefinition def = existing.stream().filter(d -> id.equals(d.id)).findFirst().orElse(null);
+         if (def == null) {
+            this.plugin.platformScheduler().runGlobal(() -> player.sendMessage(
+                    ServerTextUtil.miniMessageComponent("<#888888>NPC '<white>" + id + "<reset><#888888>' not found.<reset>")
+            ));
+            return;
+         }
+         def.navigator = navigator;
+         this.repository.upsert(this.serverId, def, player.getName());
+         World w = def.location != null && def.location.world != null
+                 ? this.plugin.getServer().getWorld(def.location.world)
+                 : player.getWorld();
+         this.npcLibrary.applyAndNotify(w, w == null ? null : this.npcLibrary.resolveLocation(w, def), existing, () ->
+                 player.sendMessage(ServerTextUtil.miniMessageComponent(
+                         "<#FFD700>NPC <#FFFFFF>" + id + "<reset><#FFD700> navigator set to <white>" + navigator + "<reset>"
+                 ))
+         );
+      });
+   }
+
    private void handleScale(Player player, String[] args) {
       if (args.length < 3) {
          player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc scale <id> <value><reset>"));
@@ -679,6 +753,104 @@ this.plugin.platformScheduler().runGlobal( () -> player.sendMessage(ServerTextUt
       this.plugin.reloadNpcDecorations();
    }
 
+   private void handleNpcDisplayBoolean(
+         Player player,
+         String[] args,
+         String label,
+         java.util.function.BiConsumer<NpcDefinition, Boolean> mutator
+   ) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc " + label + " <id> <true|false><reset>"));
+         return;
+      }
+      String id = args[1].toLowerCase(Locale.ROOT);
+      boolean value = Boolean.parseBoolean(args[2]);
+      this.mutateNpc(player, id, def -> mutator.accept(def, value), label + "=" + value);
+   }
+
+   private void handleNpcAlignment(Player player, String[] args) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc alignment <id> <left|center|right><reset>"));
+         return;
+      }
+      String alignment = args[2].toUpperCase(Locale.ROOT);
+      if (!alignment.equals("LEFT") && !alignment.equals("CENTER") && !alignment.equals("RIGHT")) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Alignment must be left, center, or right.<reset>"));
+         return;
+      }
+      this.mutateNpc(player, args[1].toLowerCase(Locale.ROOT), def -> def.hologramAlignment = alignment, "alignment=" + alignment);
+   }
+
+   private void handleNpcViewRange(Player player, String[] args) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc viewrange <id> <0.1-5><reset>"));
+         return;
+      }
+      float range;
+      try {
+         range = Float.parseFloat(args[2]);
+      } catch (NumberFormatException ex) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Invalid view range.<reset>"));
+         return;
+      }
+      if (range < 0.1F || range > 5.0F) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>View range must be between 0.1 and 5.0.<reset>"));
+         return;
+      }
+      float finalRange = range;
+      this.mutateNpc(player, args[1].toLowerCase(Locale.ROOT), def -> def.hologramViewRange = finalRange, "viewrange=" + finalRange);
+   }
+
+   private void handleNpcHoloBillboard(Player player, String[] args) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent(
+               "<#888888>Usage: /npc holobillboard <id> <fixed|vertical|horizontal|center><reset>"));
+         return;
+      }
+      String billboard = args[2].toUpperCase(Locale.ROOT);
+      this.mutateNpc(player, args[1].toLowerCase(Locale.ROOT), def -> def.hologramBillboard = billboard, "holobillboard=" + billboard);
+   }
+
+   private void handleNpcHoloScale(Player player, String[] args) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /npc holoscale <id> <0.01-10><reset>"));
+         return;
+      }
+      double scale;
+      try {
+         scale = Double.parseDouble(args[2]);
+      } catch (NumberFormatException ex) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Invalid scale.<reset>"));
+         return;
+      }
+      if (scale < 0.01D || scale > 10.0D) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Scale must be between 0.01 and 10.<reset>"));
+         return;
+      }
+      double finalScale = scale;
+      this.mutateNpc(player, args[1].toLowerCase(Locale.ROOT), def -> def.hologramScale = finalScale, "holoscale=" + finalScale);
+   }
+
+   private void mutateNpc(Player player, String id, java.util.function.Consumer<NpcDefinition> mutator, String summary) {
+      this.plugin.platformScheduler().runAsync(() -> {
+         List<NpcDefinition> existing = this.repository.loadAll(this.serverId);
+         NpcDefinition def = existing.stream().filter(d -> id.equals(d.id)).findFirst().orElse(null);
+         if (def == null) {
+            this.plugin.platformScheduler().runGlobal(() -> player.sendMessage(
+                  ServerTextUtil.miniMessageComponent("<#888888>NPC '<white>" + id + "<reset><#888888>' not found.<reset>")));
+            return;
+         }
+         mutator.accept(def);
+         this.repository.upsert(this.serverId, def, player.getName());
+         World w = def.location != null && def.location.world != null
+               ? this.plugin.getServer().getWorld(def.location.world)
+               : player.getWorld();
+         this.npcLibrary.applyAndNotify(w, w == null ? null : this.npcLibrary.resolveLocation(w, def), existing, () ->
+               player.sendMessage(ServerTextUtil.miniMessageComponent(
+                     "<#FFD700>NPC <#FFFFFF>" + id + "<reset><#FFD700> updated (" + summary + ")<reset>")));
+      });
+   }
+
    private void sendHelp(Player player) {
       player.sendMessage(
          ServerTextUtil.miniMessageComponent(
@@ -695,16 +867,23 @@ this.plugin.platformScheduler().runGlobal( () -> player.sendMessage(ServerTextUt
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc delete <id><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc list [scope]<reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc scope <id> <scope><reset>"));
-      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc action <id> <type> [data]<reset>"));
-      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc type <id> <entity_type><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc action <id> <type> [data] — COMMAND/CONSOLE/PROXY types support PlaceholderAPI<reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc type <id> <entity|PLAYER|CHEST|BLOCK:CHEST><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc skin <id> <url><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc glow <id> <true|false> [color]<reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc faceplayer <id> <true|false><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc navigator <id> <true|false><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc scale <id> <value><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc movehere <id><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc reload<reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc name <id> <display name...><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc line <add|set|remove> <id> [text]<reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc background|seethrough|shadowed|freeze <id> <true|false><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc alignment <id> <left|center|right><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc viewrange <id> <0.1-5><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc holobillboard <id> <fixed|vertical|horizontal|center><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/npc holoscale <id> <0.01-10><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Lines support MiniMessage + <smallcaps>...</smallcaps><reset>"));
       player.sendMessage(
          ServerTextUtil.miniMessageComponent(
             "<#555555>-<reset>"
@@ -723,13 +902,15 @@ this.plugin.platformScheduler().runGlobal( () -> player.sendMessage(ServerTextUt
       }
 
       if (args.length == 1) {
-         return List.of("create", "delete", "list", "scope", "action", "type", "skin", "glow", "faceplayer", "scale", "movehere", "reload", "line", "name");
+         return List.of("create", "delete", "list", "scope", "action", "type", "skin", "glow", "faceplayer", "navigator", "scale",
+               "background", "seethrough", "shadowed", "freeze", "alignment", "viewrange", "holobillboard", "holoscale",
+               "movehere", "reload", "line", "name");
       } else if (args.length == 2 && "list".equalsIgnoreCase(args[0])) {
          return DecorationScopes.KNOWN.stream().filter(s -> s.startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
       } else if (args.length == 3 && "scope".equalsIgnoreCase(args[0])) {
          return DecorationScopes.KNOWN.stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
       } else if (args.length == 3 && "action".equalsIgnoreCase(args[0])) {
-         return List.of("NONE", "CONNECT", "COMMAND", "MESSAGE");
+         return InteractionActionTypes.NPC_TAB_TYPES;
       } else {
          return args.length == 2 && "line".equalsIgnoreCase(args[0]) ? List.of("add", "set", "remove") : List.of();
       }

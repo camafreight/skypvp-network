@@ -1,0 +1,1159 @@
+{
+  "providers": [
+    {
+      "type": "space",
+      "advances": {
+        "\uE850": -1,
+        "\uE851": -2,
+        "\uE852": -3,
+        "\uE853": -4,
+        "\uE854": -8,
+        "\uE855": -16,
+        "\uE856": -32,
+        "\uE857": -64,
+        "\uE858": -128,
+        "\uE859": 1,
+        "\uE85A": 2,
+        "\uE85B": 4,
+        "\uE85C": 8,
+        "\uE85D": 16,
+        "\uE85E": 32,
+        "\uE85F": 64
+      }
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/bar_frame.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE840"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/bar_frame_top.png",
+      "height": 21,
+      "ascent": 19,
+      "chars": [
+        "\uE841"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/bar_fill.png",
+      "height": 6,
+      "ascent": 6,
+      "chars": [
+        "\uE842"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/bar_fill_top.png",
+      "height": 17,
+      "ascent": 17,
+      "chars": [
+        "\uE843"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_health.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE844"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_shield_top.png",
+      "height": 21,
+      "ascent": 19,
+      "chars": [
+        "\uE845"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_ammo.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE846"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_timer.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE847"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_extract.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE848"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_stamina.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE849"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_0.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE860"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_1.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE861"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_2.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE862"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_3.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE863"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_4.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE864"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_5.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE865"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_6.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE866"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_7.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE867"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_8.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE868"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_9.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE869"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_slash.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE86A"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/reload_0.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE86B"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/reload_1.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE86C"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/reload_2.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE86D"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/reload_3.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE86E"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w1.png",
+      "height": 6,
+      "ascent": 6,
+      "chars": [
+        "\uE870"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w2.png",
+      "height": 6,
+      "ascent": 6,
+      "chars": [
+        "\uE871"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w4.png",
+      "height": 6,
+      "ascent": 6,
+      "chars": [
+        "\uE872"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w8.png",
+      "height": 6,
+      "ascent": 6,
+      "chars": [
+        "\uE873"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w16.png",
+      "height": 6,
+      "ascent": 6,
+      "chars": [
+        "\uE874"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w32.png",
+      "height": 6,
+      "ascent": 6,
+      "chars": [
+        "\uE875"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w64.png",
+      "height": 6,
+      "ascent": 6,
+      "chars": [
+        "\uE876"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w1_top.png",
+      "height": 17,
+      "ascent": 17,
+      "chars": [
+        "\uE878"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w2_top.png",
+      "height": 17,
+      "ascent": 17,
+      "chars": [
+        "\uE879"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w4_top.png",
+      "height": 17,
+      "ascent": 17,
+      "chars": [
+        "\uE87A"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w8_top.png",
+      "height": 17,
+      "ascent": 17,
+      "chars": [
+        "\uE87B"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w16_top.png",
+      "height": 17,
+      "ascent": 17,
+      "chars": [
+        "\uE87C"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w32_top.png",
+      "height": 17,
+      "ascent": 17,
+      "chars": [
+        "\uE87D"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w64_top.png",
+      "height": 17,
+      "ascent": 17,
+      "chars": [
+        "\uE87E"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_gold.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE8BA"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_coin.png",
+      "height": 10,
+      "ascent": 8,
+      "chars": [
+        "\uE8BB"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/bar_frame.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8C0"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/bar_frame.png",
+      "height": 10,
+      "ascent": -39,
+      "chars": [
+        "\uE8C1"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_health.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8C2"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_shield_top.png",
+      "height": 21,
+      "ascent": -39,
+      "chars": [
+        "\uE8C3"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/icon_ammo.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8C4"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w1.png",
+      "height": 6,
+      "ascent": -52,
+      "chars": [
+        "\uE8C5"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w2.png",
+      "height": 6,
+      "ascent": -52,
+      "chars": [
+        "\uE8C6"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w4.png",
+      "height": 6,
+      "ascent": -52,
+      "chars": [
+        "\uE8C7"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w8.png",
+      "height": 6,
+      "ascent": -52,
+      "chars": [
+        "\uE8C8"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w16.png",
+      "height": 6,
+      "ascent": -52,
+      "chars": [
+        "\uE8C9"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w32.png",
+      "height": 6,
+      "ascent": -52,
+      "chars": [
+        "\uE8CA"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w64.png",
+      "height": 6,
+      "ascent": -52,
+      "chars": [
+        "\uE8CB"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w1.png",
+      "height": 6,
+      "ascent": -41,
+      "chars": [
+        "\uE8CD"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w2.png",
+      "height": 6,
+      "ascent": -41,
+      "chars": [
+        "\uE8CE"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w4.png",
+      "height": 6,
+      "ascent": -41,
+      "chars": [
+        "\uE8CF"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w8.png",
+      "height": 6,
+      "ascent": -41,
+      "chars": [
+        "\uE8D0"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w16.png",
+      "height": 6,
+      "ascent": -41,
+      "chars": [
+        "\uE8D1"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w32.png",
+      "height": 6,
+      "ascent": -41,
+      "chars": [
+        "\uE8D2"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/fill_w64.png",
+      "height": 6,
+      "ascent": -41,
+      "chars": [
+        "\uE8D3"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_0.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8D8"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_1.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8D9"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_2.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8DA"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_3.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8DB"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_4.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8DC"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_5.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8DD"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_6.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8DE"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_7.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8DF"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_8.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8E0"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_9.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8E1"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_slash.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8E2"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/reload_0.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8E4"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/reload_1.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8E5"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/reload_2.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8E6"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/reload_3.png",
+      "height": 10,
+      "ascent": -50,
+      "chars": [
+        "\uE8E7"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_0.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F0"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_1.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F1"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_2.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F2"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_3.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F3"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_4.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F4"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_5.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F5"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_6.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F6"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_7.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F7"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_8.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F8"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_9.png",
+      "height": 20,
+      "ascent": 15,
+      "chars": [
+        "\uE8F9"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_1.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE900"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_1.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE908"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_2.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE901"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_2.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE909"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_3.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE902"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_3.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE90A"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_4.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE903"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_4.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE90B"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_5.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE904"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_5.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE90C"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_6.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE905"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_6.png",
+      "height": 9,
+      "ascent": 7,
+      "chars": [
+        "\uE90D"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_1.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE910"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_1.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE918"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_2.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE911"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_2.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE919"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_3.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE912"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_3.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE91A"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_4.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE913"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_4.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE91B"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_5.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE914"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_5.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE91C"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_6.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE915"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/level_badge_glow_6.png",
+      "height": 12,
+      "ascent": -21,
+      "chars": [
+        "\uE91D"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_0.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE920"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_1.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE921"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_2.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE922"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_3.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE923"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_4.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE924"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_5.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE925"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_6.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE926"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_7.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE927"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_8.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE928"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_9.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE929"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/digit_plus.png",
+      "height": 10,
+      "ascent": -22,
+      "chars": [
+        "\uE92A"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/meteor_0.png",
+      "height": 32,
+      "ascent": 11,
+      "chars": [
+        "\uE930"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/meteor_1.png",
+      "height": 32,
+      "ascent": 11,
+      "chars": [
+        "\uE931"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/meteor_2.png",
+      "height": 32,
+      "ascent": 11,
+      "chars": [
+        "\uE932"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/meteor_3.png",
+      "height": 32,
+      "ascent": 11,
+      "chars": [
+        "\uE933"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/meteor_4.png",
+      "height": 32,
+      "ascent": 11,
+      "chars": [
+        "\uE934"
+      ]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:hud/meteor_5.png",
+      "height": 32,
+      "ascent": 11,
+      "chars": [
+        "\uE935"
+      ]
+    }
+  ]
+}

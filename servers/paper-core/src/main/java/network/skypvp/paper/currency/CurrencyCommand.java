@@ -1,6 +1,5 @@
 package network.skypvp.paper.currency;
 
-import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -9,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.repository.PlayerCurrencyRepository;
+import network.skypvp.shared.currency.CurrencyFormat;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -21,7 +21,6 @@ public final class CurrencyCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of("list", "add", "set", "take");
     private static final List<String> AMOUNT_SUGGESTIONS = List.of("1", "10", "100", "1000", "10000");
-    private static final NumberFormat AMOUNT_FORMAT = NumberFormat.getIntegerInstance(Locale.US);
     private static final MiniMessage MINI = MiniMessage.miniMessage();
 
     private final PaperCorePlugin plugin;
@@ -244,7 +243,7 @@ public final class CurrencyCommand implements CommandExecutor, TabCompleter {
     }
 
     private static String formatAmount(long amount) {
-        return AMOUNT_FORMAT.format(amount);
+        return CurrencyFormat.formatCoins(amount);
     }
 
     private enum ModifyMode {

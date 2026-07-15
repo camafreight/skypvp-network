@@ -59,8 +59,8 @@ public final class PartyMemberMover {
          return PartyMemberMover.MoveResult.nothingToMove();
       }
 
-      int availableSlots = this.routingService.availableSlotsForServer(targetServerId);
-      if (availableSlots < toMove.size() && this.partyQueueService != null) {
+      int partySize = toMove.size() + 1;
+      if (!this.routingService.canAdmitPartyToServer(targetServerId, partySize) && this.partyQueueService != null) {
          List<UUID> grouped = new ArrayList<>(toMove);
          grouped.add(initiatorId);
          PartyQueueService.QueueGroupResult queued = this.partyQueueService.enqueue(

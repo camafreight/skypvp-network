@@ -37,16 +37,11 @@ FN_FAL:
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 128
-    Selective_Fire:
-      Trigger:
-        Main_Hand: "DOUBLE_SNEAK"
-        Off_Hand: "DOUBLE_SNEAK"
-      Mechanics:
-        - "Sound{sound=block.note_block.hat, pitch=2.0, listeners=Source{}}"
+    # No Selective_Fire: semi-auto only (Delay_Between_Shots). WM requires two fire modes
+    # (Burst/Auto/Delay) for a selector, and this rifle has nothing to toggle to.
     Delay_Between_Shots: 5
-    Fully_Automatic_Shots_Per_Second: 9
+    Fully_Automatic_Shots_Per_Second: 0  # SkyPvP PlayerFullAutoService owns cadence (Folia region-safe)
     Spread:
       Base_Spread: 3.2
       Modify_Spread_When:

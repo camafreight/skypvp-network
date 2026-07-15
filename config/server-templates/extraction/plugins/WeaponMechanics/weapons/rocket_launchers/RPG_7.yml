@@ -39,7 +39,6 @@ RPG_7:
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 50
     Spread:
       Base_Spread: 5.5

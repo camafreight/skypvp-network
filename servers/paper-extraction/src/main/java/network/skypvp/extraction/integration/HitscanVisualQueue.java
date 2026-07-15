@@ -42,6 +42,7 @@ final class HitscanVisualQueue {
         if (pending.size() >= settings.visualQueueCapacity()) {
             pending.poll();
             int drops = dropped.incrementAndGet();
+            this.recordPipelineDrop();
             if (drops == 1 || drops % 500 == 0) {
                 this.logger.warning("[Breach] Hitscan visual queue saturated; dropping oldest cosmetic jobs.");
             }
@@ -71,6 +72,10 @@ final class HitscanVisualQueue {
             if (world == null) {
                 continue;
             }
+            if (!this.tryPipelineBudget()) {
+                this.recordPipelineDrop();
+                continue;
+            }
             long defer = settings.visualDeferTicks();
             if (defer <= 0L) {
                 this.scheduler.runAtChunk(world, job.chunkX(), job.chunkZ(), () -> this.renderer.render(world, job));
@@ -83,6 +88,26 @@ final class HitscanVisualQueue {
                         defer
                 );
             }
+        }
+    }
+
+    private boolean tryPipelineBudget() {
+        if (!(this.plugin.getServer().getPluginManager().getPlugin("SkyPvPCore")
+                instanceof network.skypvp.paper.PaperCorePlugin core)
+                || core.clientUpdatePipeline() == null) {
+            return true;
+        }
+        return core.clientUpdatePipeline().tryAcquire(
+                network.skypvp.paper.clientupdate.UpdateChannel.DISPLAY_FX,
+                1
+        );
+    }
+
+    private void recordPipelineDrop() {
+        if (this.plugin.getServer().getPluginManager().getPlugin("SkyPvPCore")
+                instanceof network.skypvp.paper.PaperCorePlugin core
+                && core.clientUpdatePipeline() != null) {
+            core.clientUpdatePipeline().recordDrop(network.skypvp.paper.clientupdate.UpdateChannel.DISPLAY_FX);
         }
     }
 }

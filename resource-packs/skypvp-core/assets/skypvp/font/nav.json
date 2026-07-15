@@ -1,0 +1,18 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "skypvp:font/nav_beam.png",
+      "height": 160,
+      "ascent": 160,
+      "chars": [""]
+    },
+    {
+      "type": "bitmap",
+      "file": "skypvp:item/nav_marker_octagon.png",
+      "height": 40,
+      "ascent": 20,
+      "chars": [""]
+    }
+  ]
+}

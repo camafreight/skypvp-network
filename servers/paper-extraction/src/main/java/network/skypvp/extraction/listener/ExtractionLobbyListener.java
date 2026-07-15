@@ -47,12 +47,19 @@ public final class ExtractionLobbyListener implements Listener {
         }
     }
 
+    /**
+     * Hunger is not used in the extraction lobby — keep the food bar full. Live raiders use the food bar as a
+     * stamina meter instead ({@link network.skypvp.extraction.gameplay.BreachStaminaService}).
+     */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onFoodLevelChange(FoodLevelChangeEvent event) {
         if (!(event.getEntity() instanceof Player player)) {
             return;
         }
-        if (BreachLobbyProtection.isLobbySafe(engine, player)) {
+        if (!BreachLobbyProtection.isLobbySafe(engine, player)) {
+            return;
+        }
+        if (event.getFoodLevel() < player.getFoodLevel()) {
             event.setCancelled(true);
             player.setFoodLevel(20);
             player.setSaturation(20.0F);

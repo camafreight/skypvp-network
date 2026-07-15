@@ -3,7 +3,10 @@ package network.skypvp.extraction.integration;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -12,23 +15,67 @@ public final class WeaponMechanicsBridge {
     private final Logger logger;
     private final boolean present;
     private final Method generateWeapon;
+    private final Method getWeaponHandler;
+    private final Method getEntityWrapper;
+    private final Method getShootHandler;
+    private final Method shootWithoutTrigger;
+    private final Method isDualWieldingWeapons;
+    private final Object startRightClickTrigger;
 
     public WeaponMechanicsBridge(JavaPlugin plugin) {
         Objects.requireNonNull(plugin, "plugin");
         this.logger = plugin.getLogger();
         Method weaponGenerator = null;
+        Method weaponHandlerAccessor = null;
+        Method entityWrapperAccessor = null;
+        Method shootHandlerAccessor = null;
+        Method shootWithoutTriggerMethod = null;
+        Method dualWieldCheck = null;
+        Object rightClickHeldTrigger = null;
         boolean available = false;
 
         try {
             Class<?> apiClass = Class.forName("me.deecaad.weaponmechanics.WeaponMechanicsAPI");
             weaponGenerator = apiClass.getMethod("generateWeapon", String.class);
+
+            Class<?> wmClass = Class.forName("me.deecaad.weaponmechanics.WeaponMechanics");
+            weaponHandlerAccessor = wmClass.getMethod("getWeaponHandler");
+            entityWrapperAccessor = wmClass.getMethod("getEntityWrapper", org.bukkit.entity.LivingEntity.class);
+
+            Class<?> weaponHandlerClass = Class.forName("me.deecaad.weaponmechanics.weapon.WeaponHandler");
+            shootHandlerAccessor = weaponHandlerClass.getMethod("getShootHandler");
+
+            Class<?> shootHandlerClass = Class.forName("me.deecaad.weaponmechanics.weapon.shoot.ShootHandler");
+            Class<?> entityWrapperClass = Class.forName("me.deecaad.weaponmechanics.wrappers.EntityWrapper");
+            Class<?> triggerTypeClass = Class.forName("me.deecaad.weaponmechanics.weapon.trigger.TriggerType");
+            shootWithoutTriggerMethod = shootHandlerClass.getMethod(
+                    "shootWithoutTrigger",
+                    entityWrapperClass,
+                    String.class,
+                    ItemStack.class,
+                    EquipmentSlot.class,
+                    triggerTypeClass,
+                    boolean.class
+            );
+            dualWieldCheck = entityWrapperClass.getMethod("isDualWieldingWeapons");
+            // WM 4.3.1 names the held-right-click trigger RIGHT_CLICK (no START_ prefix).
+            rightClickHeldTrigger = Enum.valueOf((Class<Enum>) triggerTypeClass, "RIGHT_CLICK");
+
             available = true;
-        } catch (ReflectiveOperationException ignored) {
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // RuntimeException too: a renamed enum constant throws IllegalArgumentException,
+            // and an escaping throwable here aborts the whole plugin enable (2026-07-14 outage).
             available = false;
         }
 
         this.present = available;
         this.generateWeapon = weaponGenerator;
+        this.getWeaponHandler = weaponHandlerAccessor;
+        this.getEntityWrapper = entityWrapperAccessor;
+        this.getShootHandler = shootHandlerAccessor;
+        this.shootWithoutTrigger = shootWithoutTriggerMethod;
+        this.isDualWieldingWeapons = dualWieldCheck;
+        this.startRightClickTrigger = rightClickHeldTrigger;
 
         if (present) {
             logger.info("[Breach] WeaponMechanics bridge enabled.");
@@ -58,6 +105,66 @@ public final class WeaponMechanicsBridge {
 
     public boolean isAvailable() {
         return present;
+    }
+
+    /**
+     * Fires one shot through WeaponMechanics' validated shoot path (ammo, reload, delays,
+     * permissions, dual-wield rules). Returns false when WM would refuse the shot.
+     */
+    public boolean tryShootWithoutTrigger(Player player, String weaponTitle, ItemStack weaponStack) {
+        if (!present || player == null || weaponTitle == null || weaponTitle.isBlank()
+                || weaponStack == null || weaponStack.getType().isAir()
+                || shootWithoutTrigger == null) {
+            return false;
+        }
+        try {
+            Class<?> wmClass = Class.forName("me.deecaad.weaponmechanics.WeaponMechanics");
+            Object wm = wmClass.getMethod("getInstance").invoke(null);
+            Object entityWrapper = getEntityWrapper.invoke(wm, player);
+            if (entityWrapper == null) {
+                return false;
+            }
+            Object weaponHandler = getWeaponHandler.invoke(wm);
+            Object shootHandler = getShootHandler.invoke(weaponHandler);
+            boolean dualWield = (Boolean) isDualWieldingWeapons.invoke(entityWrapper);
+            Object result = shootWithoutTrigger.invoke(
+                    shootHandler,
+                    entityWrapper,
+                    weaponTitle.trim(),
+                    weaponStack,
+                    EquipmentSlot.HAND,
+                    startRightClickTrigger,
+                    dualWield
+            );
+            return result instanceof Boolean bool && bool;
+        } catch (ReflectiveOperationException ex) {
+            logger.log(Level.FINE, "[Breach] WeaponMechanics shootWithoutTrigger failed for "
+                    + weaponTitle.trim(), ex);
+            return false;
+        }
+    }
+
+    /** True when WeaponMechanics currently has this player mid-reload. */
+    public boolean isReloading(org.bukkit.entity.Player player) {
+        if (!present || player == null) {
+            return false;
+        }
+        return invokeBooleanOnEntity("me.deecaad.weaponmechanics.WeaponMechanicsAPI", "isReloading", player);
+    }
+
+    public Optional<String> weaponTitle(ItemStack itemStack) {
+        if (!present || itemStack == null || itemStack.getType().isAir()) {
+            return Optional.empty();
+        }
+        try {
+            Class<?> apiClass = Class.forName("me.deecaad.weaponmechanics.WeaponMechanicsAPI");
+            Object title = apiClass.getMethod("getWeaponTitle", ItemStack.class).invoke(null, itemStack);
+            if (title instanceof String weaponTitle && !weaponTitle.isBlank()) {
+                return Optional.of(weaponTitle.trim());
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+        return Optional.empty();
     }
 
     public boolean isWeaponItem(ItemStack itemStack) {

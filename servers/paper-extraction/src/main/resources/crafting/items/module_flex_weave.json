@@ -1,0 +1,9 @@
+{
+  "typeId": "extraction:module_flex_weave",
+  "displayName": "Flex Weave Module",
+  "moduleEffects": [
+    {"label": "12% Less Stamina Drain", "positive": true},
+    {"label": "5% Defense", "positive": false}
+  ],
+  "loreLines": ["<gray>Leggings-only module"]
+}

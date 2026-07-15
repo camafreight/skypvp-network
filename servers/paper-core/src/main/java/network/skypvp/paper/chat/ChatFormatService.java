@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -132,20 +133,44 @@ public final class ChatFormatService {
         if (player == null) {
             return Component.empty();
         }
-        ChatFormatFlags flags = resolveRankFormat(player);
+        return renderPlayerListIdentity(player.getUniqueId(), player.getName(), resolveRankFormat(player), player);
+    }
+
+    /** Prefix + name for tab rows when the member may be offline or on another server. */
+    public Component renderPlayerListIdentity(UUID playerId, String playerName, network.skypvp.shared.RankRecord rank) {
+        return renderPlayerListIdentity(playerId, playerName, flagsForRank(rank), null);
+    }
+
+    private Component renderPlayerListIdentity(
+            UUID playerId,
+            String playerName,
+            ChatFormatFlags flags,
+            Player onlineContext
+    ) {
+        String safeName = playerName == null || playerName.isBlank() ? "?" : playerName;
         ChatRenderContext context = new ChatRenderContext(
-                player.getName(),
+                safeName,
                 "",
                 network.skypvp.shared.chat.ChatChannel.ALL.displayName()
         );
-        return ChatRenderContextHolder.callWith(
-                context,
-                () -> ChatMessageRenderer.renderIdentity(
-                        flags,
-                        context,
-                        text -> ChatPlaceholderBridge.apply(player, text, context)
-                )
-        );
+        if (onlineContext != null) {
+            return ChatRenderContextHolder.callWith(
+                    context,
+                    () -> ChatMessageRenderer.renderIdentity(
+                            flags,
+                            context,
+                            text -> ChatPlaceholderBridge.apply(onlineContext, text, context)
+                    )
+            );
+        }
+        return ChatMessageRenderer.renderIdentity(flags, context, text -> ChatPlaceholderBridge.apply(text, context));
+    }
+
+    private ChatFormatFlags flagsForRank(network.skypvp.shared.RankRecord rank) {
+        network.skypvp.shared.RankRecord safe = rank == null ? network.skypvp.shared.RankRecord.DEFAULT : rank;
+        return findRankFormat(safe.rankKey())
+                .map(ChatFormatProfile::flags)
+                .orElseGet(() -> this.systemDefaults.getOrDefault(ChatFormatScope.RANK, ChatFormatFlags.EMPTY));
     }
 
     public Component renderNamed(String playerName, ChatFormatFlags flags, String message, String channelLabel) {

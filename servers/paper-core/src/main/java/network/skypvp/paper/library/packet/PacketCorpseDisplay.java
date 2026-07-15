@@ -5,6 +5,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
+import network.skypvp.paper.library.npc.FakePlayerNpc;
 import network.skypvp.paper.platform.Platforms;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -17,7 +18,7 @@ import org.bukkit.plugin.Plugin;
 public final class PacketCorpseDisplay {
 
     private final Plugin plugin;
-    private final PacketFakePlayer body;
+    private final FakePlayerNpc body;
 
     public PacketCorpseDisplay(
         Plugin plugin,
@@ -33,7 +34,7 @@ public final class PacketCorpseDisplay {
             corpseBody.setPitch(0.0F);
         }
 
-        this.body = new PacketFakePlayer(
+        this.body = new FakePlayerNpc(
             plugin,
             corpseProfileName(name),
             textureValue,

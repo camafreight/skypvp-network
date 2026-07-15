@@ -1,0 +1,1 @@
+{"typeId":"extraction:medic_medkit","displayName":"Medkit","coinCost":120,"stats":{"stackSize":8,"healAmount":30.0,"healChunkAmount":6.0,"healChunkIntervalTicks":5,"consumeSeconds":1.4,"useCooldownMillis":6000}}

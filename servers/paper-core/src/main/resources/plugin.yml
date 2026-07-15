@@ -24,6 +24,10 @@ commands:
     description: Manage persistent NPCs on this server (staff only).
     usage: /npc <create|delete|list|action|reload>
     permission: skypvp.staff
+  quest:
+    description: Manage dynamic quest NPCs, the shared POI location pool, and the schedule clock (staff only).
+    usage: /quest <location|npc|clock|debug|reload>
+    permission: skypvp.staff
 
   ignore:
     description: Toggle ignoring private messages from a player.
@@ -71,6 +75,10 @@ commands:
     usage: /hologram <create|delete|list|action|addline|removeline|reload>
     permission: skypvp.staff
     aliases: [holo]
+  playblocks:
+    description: Give lobby play signage blocks (resource-pack LIGHT remaps).
+    usage: /playblocks give <01|02|both>
+    permission: skypvp.staff
   nametag:
     description: Edit the player nametag layout rendered above heads.
     usage: /nametag <line|scope|list|offset|spacing|scale|refresh|background|hidevanilla|self|toggle|sample|reload>

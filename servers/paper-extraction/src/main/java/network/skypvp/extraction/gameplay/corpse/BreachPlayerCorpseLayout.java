@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Map;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import network.skypvp.extraction.backpack.BackpackService;
 import network.skypvp.paper.service.CoreHotbarService;
 import network.skypvp.paper.service.PlayerInventoryManager;
 import network.skypvp.extraction.text.ExtractionTexts;
@@ -87,7 +88,7 @@ public final class BreachPlayerCorpseLayout {
             mergeCollectionIntoLoot(loot, deathDrops, hotbarService);
         }
         if (isEmpty(loot) && player != null && inventoryManager != null) {
-            mapEncodedSlots(inventoryManager.captureRaidInventory(player), loot);
+            mapEncodedSlots(inventoryManager.captureRaidInventory(player), loot, hotbarService);
         }
         return loot;
     }
@@ -145,10 +146,18 @@ public final class BreachPlayerCorpseLayout {
     }
 
     private static boolean isIgnoredItem(ItemStack item, CoreHotbarService hotbarService) {
-        return hotbarService != null && hotbarService.isServerItem(item);
+        if (hotbarService != null && hotbarService.isServerItem(item)) {
+            return true;
+        }
+        // Offhand "NO BACKPACK" dye is inventory chrome, not loot.
+        return BackpackService.isPlaceholderItem(item);
     }
 
-    private static void mapEncodedSlots(Map<Integer, String> encoded, ItemStack[] loot) {
+    private static void mapEncodedSlots(
+            Map<Integer, String> encoded,
+            ItemStack[] loot,
+            CoreHotbarService hotbarService
+    ) {
         if (encoded == null || encoded.isEmpty()) {
             return;
         }
@@ -161,7 +170,11 @@ public final class BreachPlayerCorpseLayout {
                 return;
             }
             try {
-                loot[targetSlot] = network.skypvp.paper.library.ItemStackCodec.decode(payload);
+                ItemStack decoded = network.skypvp.paper.library.ItemStackCodec.decode(payload);
+                if (decoded == null || decoded.getType().isAir() || isIgnoredItem(decoded, hotbarService)) {
+                    return;
+                }
+                loot[targetSlot] = decoded;
             } catch (RuntimeException ignored) {
             }
         });

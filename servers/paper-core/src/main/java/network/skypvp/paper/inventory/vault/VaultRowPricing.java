@@ -1,14 +1,12 @@
 package network.skypvp.paper.inventory.vault;
 
-import java.text.NumberFormat;
-import java.util.Locale;
+import network.skypvp.shared.currency.CurrencyFormat;
 
 /** Procedural coin cost for unlocking the next vault row (one row at a time). */
 public final class VaultRowPricing {
 
     private static final int BASE_PRICE = 500;
     private static final double GROWTH = 1.32;
-    private static final NumberFormat COIN_FORMAT = NumberFormat.getIntegerInstance(Locale.US);
 
     private VaultRowPricing() {
     }
@@ -27,6 +25,6 @@ public final class VaultRowPricing {
     }
 
     public static String formatCoins(long amount) {
-        return COIN_FORMAT.format(Math.max(0L, amount));
+        return CurrencyFormat.formatCoins(Math.max(0L, amount));
     }
 }

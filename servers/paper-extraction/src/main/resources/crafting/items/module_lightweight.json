@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_lightweight",
+  "displayName": "Lightweight Module",
+  "moduleEffects": [
+    {"label": "15% Less Stamina Drain", "positive": true},
+    {"label": "6% Defense", "positive": false}
+  ]
+}

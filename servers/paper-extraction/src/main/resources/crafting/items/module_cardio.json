@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_cardio",
+  "displayName": "Cardio Module",
+  "moduleEffects": [
+    {"label": "18% Stamina Regen", "positive": true},
+    {"label": "4% Defense", "positive": false}
+  ]
+}

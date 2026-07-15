@@ -70,6 +70,18 @@ node-*-journal.log
 # One-off k8s patch payloads
 patch*.json
 
+# Ephemeral WM pack merge workspace
+resource-packs/_wm-tmp/
+
+# Agent/debug pack scratch trees (never ship)
+resource-packs/_fix*/
+resource-packs/_live*/
+resource-packs/_carbine*/
+resource-packs/_zip*/
+resource-packs/_verify*/
+resource-packs/_laser_sections/
+resource-packs/_wm-classes/
+
 # Abandoned / duplicate trees (see REVIEW-CLEANUP.md)
 web-admin/
 WeaponMechanics/
@@ -87,3 +99,18 @@ RUN-NETWORK.cmd
 # Editor / agent local settings
 .claude/
 .vscode/
+
+# Local Gradle / Docker Desktop cache (never commit)
+.gradle-docker/
+
+
+# Local spark profiler dumps
+.spark-*
+spark/
+
+
+# Root pack artifacts (source of truth is resource-packs/ + skypvp-web public/pack)
+skypvp-core.zip
+skypvp-core.sha1
+skypvp-core.meta.json
+

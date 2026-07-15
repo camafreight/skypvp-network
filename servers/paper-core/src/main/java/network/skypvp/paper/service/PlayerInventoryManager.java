@@ -88,6 +88,8 @@ public final class PlayerInventoryManager {
          return;
       }
       this.repository.preloadContainers(playerId, this.preloadContainerTypes());
+      // Warms the rows cache so the first vault open is fully synchronous (no DB hop).
+      this.repository.loadVaultUnlockedRows(playerId);
    }
 
    public void prepareJoinedPlayerInventory(Player player) {
@@ -95,6 +97,8 @@ public final class PlayerInventoryManager {
          return;
       }
       UUID playerId = player.getUniqueId();
+      // Warms the rows cache so the first vault open is fully synchronous (no DB hop).
+      this.repository.loadVaultUnlockedRows(playerId);
       this.repository.preloadContainers(playerId, this.preloadContainerTypes()).thenAcceptAsync(ignored -> {
          if (this.plugin.serverRole() != NetworkServerRole.EXTRACTION) {
             return;
@@ -603,6 +607,14 @@ public final class PlayerInventoryManager {
          return;
       }
       this.clearRaidContainer(player.getUniqueId());
+   }
+
+   /** Offline variant: wipes an escrowed RAID container by id (used when an AFK stand-in's owner is eliminated). */
+   public void clearRaid(UUID playerId) {
+      if (playerId == null) {
+         return;
+      }
+      this.clearRaidContainer(playerId);
    }
 
    private CompletableFuture<Void> clearRaidContainer(UUID playerId) {

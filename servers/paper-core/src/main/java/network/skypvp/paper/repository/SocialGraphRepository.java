@@ -121,6 +121,41 @@ public final class SocialGraphRepository {
             );
    }
 
+   /**
+    * Returns the subset of {@code memberIds} that currently have an OPEN network session (i.e. are online somewhere on
+    * the network). Backs cross-server presence dots on the party scoreboard. Best-effort: a crashed server can leave a
+    * session row open, so this is an approximation, not a hard guarantee.
+    */
+   public CompletableFuture<java.util.Set<UUID>> onlineMembers(java.util.Collection<UUID> memberIds) {
+      if (memberIds == null || memberIds.isEmpty()) {
+         return CompletableFuture.completedFuture(java.util.Set.of());
+      }
+      List<UUID> ids = List.copyOf(memberIds);
+      return this.asyncDbExecutor.supply("social.onlineMembers", connection -> {
+         StringBuilder placeholders = new StringBuilder();
+         for (int index = 0; index < ids.size(); index++) {
+            placeholders.append(index == 0 ? "?" : ",?");
+         }
+         String sql = "select distinct player_id from network_player_sessions "
+            + "where left_at is null and player_id in (" + placeholders + ")";
+         java.util.Set<UUID> online = new java.util.HashSet<>();
+         try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int index = 0; index < ids.size(); index++) {
+               statement.setObject(index + 1, ids.get(index));
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+               while (rs.next()) {
+                  UUID id = toUuid(rs.getObject("player_id"));
+                  if (id != null) {
+                     online.add(id);
+                  }
+               }
+            }
+         }
+         return online;
+      });
+   }
+
    public CompletableFuture<Optional<SocialGraphRepository.PartySnapshot>> partyForMember(UUID memberId) {
       return memberId == null
          ? CompletableFuture.completedFuture(Optional.empty())
@@ -128,11 +163,12 @@ public final class SocialGraphRepository {
             .supply(
                "social.partyForMember",
                connection -> {
-                  String sql = "select p.party_id, p.leader_id, p.follow_leader,\n       m.member_id, m.role, np.last_username as member_name\nfrom network_party_members anchor\njoin network_parties p on p.party_id = anchor.party_id\njoin network_party_members m on m.party_id = p.party_id\nleft join network_players np on np.player_id = m.member_id\nwhere anchor.member_id = ?\norder by np.last_username asc nulls last\n";
+                  String sql = "select p.party_id, p.leader_id, p.follow_leader, p.open,\n       m.member_id, m.role, np.last_username as member_name\nfrom network_party_members anchor\njoin network_parties p on p.party_id = anchor.party_id\njoin network_party_members m on m.party_id = p.party_id\nleft join network_players np on np.player_id = m.member_id\nwhere anchor.member_id = ?\norder by np.last_username asc nulls last\n";
                   List<SocialGraphRepository.PartyMember> members = new ArrayList<>();
                   UUID partyId = null;
                   UUID leaderId = null;
                   boolean followLeader = true;
+                  boolean open = false;
 
                   try (PreparedStatement statement = connection.prepareStatement(sql)) {
                      statement.setObject(1, memberId);
@@ -143,6 +179,7 @@ public final class SocialGraphRepository {
                               partyId = toUuid(rs.getObject("party_id"));
                               leaderId = toUuid(rs.getObject("leader_id"));
                               followLeader = rs.getBoolean("follow_leader");
+                              open = rs.getBoolean("open");
                            }
 
                            UUID rowMemberId = toUuid(rs.getObject("member_id"));
@@ -158,12 +195,54 @@ public final class SocialGraphRepository {
 
                   if (partyId != null && leaderId != null) {
                      members.sort(Comparator.comparing(SocialGraphRepository.PartyMember::username, String.CASE_INSENSITIVE_ORDER));
-                     return Optional.of(new SocialGraphRepository.PartySnapshot(partyId, leaderId, followLeader, List.copyOf(members)));
+                     return Optional.of(new SocialGraphRepository.PartySnapshot(partyId, leaderId, followLeader, open, List.copyOf(members)));
                   } else {
                      return Optional.empty();
                   }
                }
             );
+   }
+
+   /**
+    * Lists open parties a seeker could join for the "find a party" browser. Skips the seeker's own party and any
+    * party already at/over {@code maxSize}, ordering the fullest (most social) parties first so groups fill up.
+    */
+   public CompletableFuture<List<SocialGraphRepository.OpenPartySummary>> listOpenParties(UUID viewerId, int maxSize) {
+      if (viewerId == null) {
+         return CompletableFuture.completedFuture(List.of());
+      }
+      return this.asyncDbExecutor.supply("social.listOpenParties", connection -> {
+         String sql = "select p.party_id, p.leader_id, np.last_username as leader_name, count(m.member_id) as member_count\n"
+            + "from network_parties p\n"
+            + "join network_party_members m on m.party_id = p.party_id\n"
+            + "left join network_players np on np.player_id = p.leader_id\n"
+            + "where p.open = true\n"
+            + "  and not exists (select 1 from network_party_members vm where vm.party_id = p.party_id and vm.member_id = ?)\n"
+            + "group by p.party_id, p.leader_id, np.last_username\n"
+            + "having count(m.member_id) < ?\n"
+            + "order by member_count desc\n"
+            + "limit 45\n";
+         List<SocialGraphRepository.OpenPartySummary> parties = new ArrayList<>();
+         try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, viewerId);
+            statement.setInt(2, maxSize);
+            try (ResultSet rs = statement.executeQuery()) {
+               while (rs.next()) {
+                  UUID partyId = toUuid(rs.getObject("party_id"));
+                  UUID leaderId = toUuid(rs.getObject("leader_id"));
+                  if (partyId != null && leaderId != null) {
+                     parties.add(new SocialGraphRepository.OpenPartySummary(
+                        partyId,
+                        leaderId,
+                        resolveName(rs.getString("leader_name"), leaderId),
+                        rs.getInt("member_count")
+                     ));
+                  }
+               }
+            }
+         }
+         return List.copyOf(parties);
+      });
    }
 
    public CompletableFuture<Boolean> setPartyFollowLeader(UUID actorId, boolean followLeader) {
@@ -345,7 +424,10 @@ public final class SocialGraphRepository {
    public static record PartyMember(UUID playerId, String username, boolean leader, PartyRole role) {
    }
 
-   public static record PartySnapshot(UUID partyId, UUID leaderId, boolean followLeader, List<SocialGraphRepository.PartyMember> members) {
+   public static record PartySnapshot(UUID partyId, UUID leaderId, boolean followLeader, boolean open, List<SocialGraphRepository.PartyMember> members) {
+   }
+
+   public static record OpenPartySummary(UUID partyId, UUID leaderId, String leaderName, int memberCount) {
    }
 
    public static record SocialPlayer(UUID playerId, String username) {

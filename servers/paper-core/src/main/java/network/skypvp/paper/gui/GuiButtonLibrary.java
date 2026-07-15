@@ -17,8 +17,26 @@ public final class GuiButtonLibrary {
       return build(material, "#FFFFFF", title, loreConsumer);
    }
 
+   /** Informational card with the pack {@code ui_question_mark} icon. */
+   public static ItemStack infoCard(String title, Consumer<GuiTextLibrary.LoreBuilder> loreConsumer) {
+      return infoQuestion(title, loreConsumer);
+   }
+
    public static ItemStack infoCard(Material material, String title, Consumer<GuiTextLibrary.LoreBuilder> loreConsumer) {
       return secondaryAction(material, title, loreConsumer);
+   }
+
+   public static ItemStack infoQuestion(String title, Consumer<GuiTextLibrary.LoreBuilder> loreConsumer) {
+      return buildChrome(GuiTextureItems.UI_QUESTION, "#FFFFFF", title, loreConsumer);
+   }
+
+   public static ItemStack infoExclamation(String title, Consumer<GuiTextLibrary.LoreBuilder> loreConsumer) {
+      return buildChrome(GuiTextureItems.UI_EXCLAMATION, "#FFAA55", title, loreConsumer);
+   }
+
+   /** Center header for hub/browser menus (title + body lines). */
+   public static ItemStack menuHeader(String title, Consumer<GuiTextLibrary.LoreBuilder> loreConsumer) {
+      return infoQuestion(title, loreConsumer);
    }
 
    public static ItemStack positiveAction(Material material, String title, Consumer<GuiTextLibrary.LoreBuilder> loreConsumer) {
@@ -30,11 +48,15 @@ public final class GuiButtonLibrary {
    }
 
    public static ItemStack close(String summary) {
-      return secondaryAction(Material.COMPASS, "Close", lore -> lore.bullet(summary).footer("<#888888>", "Click to close"));
+      return buildChrome(GuiTextureItems.UI_CLOSE, "#FFFFFF", "Close", lore -> lore
+            .bullet(summary)
+            .footer("<#888888>", "Click to close"));
    }
 
    public static ItemStack back(String summary) {
-      return secondaryAction(Material.ARROW, "Back", lore -> lore.bullet(summary).footer("<#888888>", "Click to go back"));
+      return buildChrome(GuiTextureItems.UI_BACK, "#FFFFFF", "Back", lore -> lore
+            .bullet(summary)
+            .footer("<#888888>", "Click to go back"));
    }
 
    public static ItemStack backToMainMenu() {
@@ -64,9 +86,9 @@ public final class GuiButtonLibrary {
    }
 
    public static ItemStack previousPage(int currentPage, int totalPages) {
-      return secondaryAction(
-         Material.ARROW, "Back Page", lore -> lore.fact("Page", currentPage + " / " + totalPages).footerStrong("<yellow>", "Click for the previous page")
-      );
+      return buildChrome(GuiTextureItems.UI_BACK, "#FFFFFF", "Back Page", lore -> lore
+            .fact("Page", currentPage + " / " + totalPages)
+            .footerStrong("<yellow>", "Click for the previous page"));
    }
 
    public static ItemStack nextPage(int currentPage, int totalPages) {
@@ -92,6 +114,14 @@ public final class GuiButtonLibrary {
          int remainingSeconds = Math.max(0, feedback.remainingSeconds());
          lore.footerStrong("<red>", remainingSeconds + "s");
       });
+   }
+
+   private static ItemStack buildChrome(String modelId, String accent, String title, Consumer<GuiTextLibrary.LoreBuilder> loreConsumer) {
+      GuiTextLibrary.LoreBuilder lore = GuiTextLibrary.lore();
+      if (loreConsumer != null) {
+         loreConsumer.accept(lore);
+      }
+      return GuiTextureItems.chrome(modelId, GuiTextLibrary.title(accent, title), lore.build());
    }
 
    private static ItemStack build(Material material, String accent, String title, Consumer<GuiTextLibrary.LoreBuilder> loreConsumer) {

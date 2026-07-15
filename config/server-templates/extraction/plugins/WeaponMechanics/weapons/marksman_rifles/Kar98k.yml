@@ -37,7 +37,6 @@ Kar98k:
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 300
     Delay_Between_Shots: 18
     Spread:

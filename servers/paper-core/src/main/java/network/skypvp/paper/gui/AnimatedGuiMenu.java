@@ -13,4 +13,11 @@ public interface AnimatedGuiMenu extends GuiMenu {
 
     /** Re-applies one animation frame without clearing interactive button slots. */
     void renderAnimatedFrame(Player viewer, Inventory inventory, int frameIndex);
+
+    default boolean hasAnimatedButtons() {
+        return false;
+    }
+
+    default void renderAnimatedButtons(Player viewer, Inventory inventory, long tickMillis) {
+    }
 }

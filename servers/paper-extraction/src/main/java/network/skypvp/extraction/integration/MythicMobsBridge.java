@@ -15,7 +15,8 @@ public final class MythicMobsBridge {
 
     private final Logger logger;
     private final boolean present;
-    private final List<UUID> spawnedEntityIds = new ArrayList<>();
+    /** Concurrent: spawns register from Folia region threads, resets run on the global thread. */
+    private final java.util.Set<UUID> spawnedEntityIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public MythicMobsBridge(JavaPlugin plugin) {
         Objects.requireNonNull(plugin, "plugin");
@@ -60,8 +61,42 @@ public final class MythicMobsBridge {
 
         var mobManager = MythicBukkit.inst().getMobManager();
         for (UUID entityId : new ArrayList<>(spawnedEntityIds)) {
-            mobManager.getActiveMob(entityId).ifPresent(ActiveMob::remove);
+            try {
+                mobManager.getActiveMob(entityId).ifPresent(ActiveMob::remove);
+            } catch (IllegalStateException foreignRegion) {
+                // Folia: entity owned by another region; its world unload will clean it up.
+            }
         }
         spawnedEntityIds.clear();
+    }
+
+    /**
+     * Despawns and untracks only the mobs living in {@code world}. Instance resets MUST use
+     * this instead of {@link #despawnTracked()} — the global variant wiped every sibling
+     * breach's mobs whenever one instance recycled.
+     */
+    public void despawnTrackedInWorld(org.bukkit.World world) {
+        if (world == null) {
+            return;
+        }
+        for (UUID entityId : new ArrayList<>(spawnedEntityIds)) {
+            org.bukkit.entity.Entity entity = org.bukkit.Bukkit.getEntity(entityId);
+            if (entity == null) {
+                // Gone entirely; drop the stale id.
+                spawnedEntityIds.remove(entityId);
+                continue;
+            }
+            if (!world.equals(entity.getWorld())) {
+                continue;
+            }
+            spawnedEntityIds.remove(entityId);
+            if (present) {
+                try {
+                    MythicBukkit.inst().getMobManager().getActiveMob(entityId).ifPresent(ActiveMob::remove);
+                } catch (IllegalStateException foreignRegion) {
+                    // Folia: owned by another region thread; the imminent world unload removes it.
+                }
+            }
+        }
     }
 }

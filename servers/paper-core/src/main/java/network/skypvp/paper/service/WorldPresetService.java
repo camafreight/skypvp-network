@@ -135,9 +135,9 @@ public final class WorldPresetService {
                var5 = new WorldPresetMeta(
                   presetId,
                   obj.has("description") ? obj.get("description").getAsString() : "",
-                  obj.has("spawnX") ? obj.get("spawnX").getAsInt() : 0,
-                  obj.has("spawnY") ? obj.get("spawnY").getAsInt() : 64,
-                  obj.has("spawnZ") ? obj.get("spawnZ").getAsInt() : 0,
+                  obj.has("spawnX") ? obj.get("spawnX").getAsDouble() : 0.0D,
+                  obj.has("spawnY") ? obj.get("spawnY").getAsDouble() : 64.0D,
+                  obj.has("spawnZ") ? obj.get("spawnZ").getAsDouble() : 0.0D,
                   obj.has("spawnYaw") ? obj.get("spawnYaw").getAsFloat() : 0.0F,
                   obj.has("spawnPitch") ? obj.get("spawnPitch").getAsFloat() : 0.0F
                );

@@ -53,7 +53,6 @@
         Zooming: 50%
         Sneaking: 50%
         In_Midair: 150%
-        Dual_Wielding: 150%
     Recoil:
       Mean_X: 0.2
       Mean_Y: 2.2
@@ -87,8 +86,6 @@
     Trigger:
       Main_Hand: "LEFT_CLICK"
       Off_Hand: "LEFT_CLICK"
-      Circumstance:
-        Dual_Wielding: "DENY"
     Zoom_Amount: 1.3
     Shoot_Delay_After_Scope: 8
     Mechanics:

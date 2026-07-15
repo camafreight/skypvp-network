@@ -25,6 +25,7 @@ public final class BossBarService {
    private static final Set<Flag> DEFAULT_FLAGS = Set.of();
    private final PaperCorePlugin plugin;
    private final Map<UUID, BossBar> bars = new ConcurrentHashMap<>();
+   private final Map<UUID, AppliedFrame> lastApplied = new ConcurrentHashMap<>();
 
    public BossBarService(PaperCorePlugin plugin) {
       this.plugin = plugin;
@@ -36,6 +37,7 @@ public final class BossBarService {
          this.hideForPlayer(player);
          BossBar bar = this.createBar(snapshot);
          this.bars.put(player.getUniqueId(), bar);
+         this.lastApplied.put(player.getUniqueId(), AppliedFrame.from(snapshot));
          player.showBossBar(bar);
       } else {
          this.hideForPlayer(player);
@@ -44,6 +46,7 @@ public final class BossBarService {
 
    public void hideForPlayer(Player player) {
       BossBar bar = this.bars.remove(player.getUniqueId());
+      this.lastApplied.remove(player.getUniqueId());
       if (bar != null) {
          player.hideBossBar(bar);
       }
@@ -57,15 +60,28 @@ public final class BossBarService {
    }
 
    public void refreshPlayer(Player player) {
+      var pipeline = this.plugin.clientUpdatePipeline();
+      if (pipeline != null) {
+         pipeline.offerBossBarRefresh(player);
+         return;
+      }
+      this.flushPlayer(player);
+   }
+
+   /** Pipeline drain entry — applies the current boss-bar snapshot with content diff. */
+   public void flushPlayer(Player player) {
       BossBarService.BossBarSnapshot snapshot = this.snapshot(player);
       if (snapshot.enabled() && snapshot.visible()) {
          BossBar bar = this.bars.get(player.getUniqueId());
+         AppliedFrame next = AppliedFrame.from(snapshot);
          if (bar == null) {
             bar = this.createBar(snapshot);
             this.bars.put(player.getUniqueId(), bar);
+            this.lastApplied.put(player.getUniqueId(), next);
             player.showBossBar(bar);
-         } else {
+         } else if (!next.equals(this.lastApplied.get(player.getUniqueId()))) {
             this.applyFrame(bar, snapshot);
+            this.lastApplied.put(player.getUniqueId(), next);
          }
       } else {
          this.hideForPlayer(player);
@@ -151,5 +167,22 @@ public final class BossBarService {
    public static record BossBarSnapshot(
       Component title, float progress, Color color, Overlay overlay, Set<Flag> flags, boolean visible, boolean enabled, boolean providerApplied
    ) {
+   }
+
+   /**
+    * Diff key for client packets — avoids re-mutating Adventure boss bars when nothing changed.
+    * Progress is quantized to ~0.5% so tiny float noise does not spam updates.
+    */
+   private static record AppliedFrame(Component title, int progressMillis, Color color, Overlay overlay, Set<Flag> flags) {
+      static AppliedFrame from(BossBarSnapshot snapshot) {
+         int quantized = Math.round(Math.max(0.0F, Math.min(1.0F, snapshot.progress())) * 200.0F);
+         return new AppliedFrame(
+               snapshot.title(),
+               quantized,
+               snapshot.color(),
+               snapshot.overlay(),
+               snapshot.flags() == null ? Set.of() : Set.copyOf(snapshot.flags())
+         );
+      }
    }
 }

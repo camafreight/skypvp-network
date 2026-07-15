@@ -73,7 +73,7 @@ public final class ExtractionWeaponLobbyGuard implements Listener {
                 try {
                     Object shooter = getPlayer.invoke(event);
                     if (shooter instanceof Player player) {
-                        tracker.record(player.getEyeLocation());
+                        tracker.record(player.getEyeLocation(), player.getUniqueId());
                     }
                 } catch (ReflectiveOperationException ignored) {
                 }

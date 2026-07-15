@@ -6,6 +6,7 @@ folia-supported: true
 depend:
   - SkyPvPCore
 softdepend:
+  - LibsDisguises
   - PlaceholderAPI
   - WorldGuard
   - WeaponMechanics
@@ -18,7 +19,92 @@ commands:
     description: Aether Breach match controls
     usage: /breach <play|leave|status|list> [map]
     permission: skypvp.breach.use
+  breachitems:
+    description: Custom item testing commands for Aether Breach
+    usage: /breachitems <giveinfuse|giveshield|giverecharger|givemodule|givematerials|giveblueprint|setmark|setshield|clearshield|breakshield|status> ...
+    # giveinfuse: [helmet|chestplate|leggings|boots|set] [rarity] [vanguard|striker|medic|phantom]
+    permission: skypvp.breach.items
+  combat:
+    description: Combat debugging for Aether Breach raids
+    usage: /combat <status|log|lasertest> ...
+    permission: skypvp.combat.debug
+  infuse:
+    description: Open the Infuse & Overclocking menu
+    usage: /infuse
+    permission: skypvp.breach.infuse
+  armory:
+    description: Open the armory hub (infuse, salvage, mark upgrade, shield repair)
+    usage: /armory
+    permission: skypvp.breach.armory
+  blackmarket:
+    description: Open the black market (coin/gold armor kits)
+    usage: /blackmarket
+    permission: skypvp.breach.blackmarket
+  craft:
+    description: Open the blueprint craft workbench
+    usage: /craft
+    permission: skypvp.breach.craft
+  refinery:
+    description: Open the material refinery (break down higher-tier materials)
+    usage: /refinery
+    permission: skypvp.breach.refinery
+  armoryreload:
+    description: Reload crafting JSON configs without restarting
+    usage: /armoryreload
+    permission: skypvp.breach.crafting.reload
+  medic:
+    description: Open the medic bay shop
+    usage: /medic
+    permission: skypvp.breach.medic
+  stash:
+    description: Open your material stash
+    usage: /stash
+    permission: skypvp.breach.stash
+  scrapper:
+    description: Passive breach material collector status
+    usage: /scrapper
+    permission: skypvp.breach.scrapper
+  extractionhub:
+    description: Staff helper for extraction hub NPC wiring
+    usage: /extractionhub [stations|placehint]
+    permission: skypvp.breach.hub.admin
 permissions:
   skypvp.breach.use:
     description: Allows use of /breach commands
     default: true
+  skypvp.breach.items:
+    description: Allows /breachitems testing commands (give Infuse armor, status)
+    default: op
+  skypvp.combat.debug:
+    description: Allows /combat status and /combat log for breach combat debugging
+    default: op
+  skypvp.breach.infuse:
+    description: Allows opening the Infuse & Overclocking menu
+    default: true
+  skypvp.breach.armory:
+    description: Allows opening the armory hub in the extraction lobby
+    default: true
+  skypvp.breach.blackmarket:
+    description: Allows opening the black market in the extraction lobby
+    default: true
+  skypvp.breach.craft:
+    description: Allows opening the blueprint craft workbench in the extraction lobby
+    default: true
+  skypvp.breach.refinery:
+    description: Allows opening the material refinery in the extraction lobby
+    default: true
+  skypvp.breach.crafting.reload:
+    description: Allows reloading crafting JSON configs at runtime
+    default: op
+  skypvp.breach.medic:
+    description: Allows opening the medic bay in the extraction lobby
+    default: true
+  skypvp.breach.stash:
+    description: Allows opening the material stash in the extraction lobby
+    default: true
+  skypvp.breach.scrapper:
+    description: Allows /scrapper breach material collector status
+    default: true
+  skypvp.breach.hub.admin:
+    description: Lists hub NPC presets and placement hints for staff
+    default: op

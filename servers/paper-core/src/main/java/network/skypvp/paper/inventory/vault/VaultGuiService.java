@@ -17,6 +17,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.gui.GuiButtonLibrary;
 import network.skypvp.paper.gui.GuiClickContext;
+import network.skypvp.paper.gui.GuiClickInventory;
 import network.skypvp.paper.gui.GuiManager;
 import network.skypvp.paper.gui.GuiMenu;
 import network.skypvp.paper.gui.GuiMenuBuilder;
@@ -63,6 +64,13 @@ public final class VaultGuiService {
                 PlayerInventoryManager.CONTAINER_VAULT
         );
         if (cached.isPresent()) {
+            // Fully warm (containers preload at join; rows cache after the first load/purchase):
+            // open synchronously on the caller's thread — no async hops, no perceptible delay.
+            Optional<Integer> cachedRows = this.repository.getCachedVaultUnlockedRows(playerId);
+            if (cachedRows.isPresent()) {
+                this.openVaultInventory(player, cached.get(), cachedRows.get(), returnToNetworkMenu);
+                return;
+            }
             this.repository.loadVaultUnlockedRows(playerId).thenAcceptAsync(unlockedRows -> {
                 this.plugin.platformScheduler().runOnPlayer(player, () -> {
                     if (player.isOnline()) {
@@ -108,8 +116,8 @@ public final class VaultGuiService {
         holder.setUnlockedRows(unlockedRows);
         holder.replaceAll(this.decodeSlots(slots));
         holder.setPage(holder.preferredOpenPage());
-        Inventory inventory = VaultLayout.createInventory(holder);
-        player.openInventory(inventory);
+        VaultMenu menu = new VaultMenu(holder, this, this.plugin.coreHotbarService());
+        this.guiManager.open(player, menu);
         NetworkSoundCue.UI_BUTTON_CLICK.play(player);
     }
 
@@ -123,18 +131,29 @@ public final class VaultGuiService {
             return;
         }
         holder.setPage(nextPage);
-        VaultLayout.render(holder.getInventory(), holder);
-        player.updateInventory();
+        // Re-open (GuiManager replaces in place, preserving history): the open-screen packet
+        // is the only way to resend the title, and the title carries the scroll thumb glyph.
+        // An in-place repaint would move the items but leave the thumb frozen. The
+        // scroll-transition flag suppresses the replaced menu's close-time persist; open()
+        // runs its close callbacks synchronously, so the flag window is exact.
+        VaultMenu menu = new VaultMenu(holder, this, this.plugin.coreHotbarService());
+        holder.beginScrollTransition();
+        try {
+            this.guiManager.open(player, menu);
+        } finally {
+            holder.endScrollTransition();
+        }
     }
 
-    public void handleClose(Inventory inventory) {
-        if (!(inventory.getHolder() instanceof VaultHolder holder)) {
+    /** Writes holder state to the vault cache and database. */
+    public void persistHolder(VaultHolder holder) {
+        if (holder == null || this.pendingSessions.containsKey(holder.playerId())) {
             return;
         }
-        if (this.pendingSessions.containsKey(holder.playerId())) {
-            return;
+        Inventory inventory = holder.getInventory();
+        if (inventory != null) {
+            VaultLayout.syncContentFromInventory(inventory, holder);
         }
-        VaultLayout.syncContentFromInventory(inventory, holder);
         this.save(holder.playerId(), holder.snapshot());
     }
 
@@ -142,10 +161,7 @@ public final class VaultGuiService {
         if (player == null || holder == null) {
             return;
         }
-        if (holder.getInventory() != null) {
-            VaultLayout.syncContentFromInventory(holder.getInventory(), holder);
-            this.save(holder.playerId(), holder.snapshot());
-        }
+        persistHolder(holder);
         player.closeInventory();
         if (holder.returnToNetworkMenu() && this.networkMenuService != null) {
             this.plugin.platformScheduler().runOnPlayer(player, () -> this.networkMenuService.openRootMenu(player));
@@ -319,34 +335,125 @@ public final class VaultGuiService {
             return;
         }
         VaultHolder holder = session.holder();
-        Inventory inventory = VaultLayout.createInventory(holder);
-        player.openInventory(inventory);
+        VaultMenu menu = new VaultMenu(holder, this, this.plugin.coreHotbarService());
+        this.guiManager.open(player, menu);
         NetworkSoundCue.UI_BUTTON_CLICK.play(player);
     }
 
-    public boolean depositShiftClickedStack(Player player, VaultHolder holder, ItemStack stack) {
+    public int depositShiftClickedStack(Player player, VaultHolder holder, ItemStack stack) {
+        return depositStack(player, holder, stack, -1);
+    }
+
+    /**
+     * Deposits into a specific vault slot when possible (drag target), otherwise uses smart placement.
+     *
+     * @return amount deposited
+     */
+    public int depositStack(Player player, VaultHolder holder, ItemStack stack, int preferredVaultIndex) {
         if (player == null || holder == null || stack == null || stack.getType().isAir()) {
-            return false;
+            return 0;
         }
         if (holder.getInventory() != null) {
             VaultLayout.syncContentFromInventory(holder.getInventory(), holder);
         }
-        int targetSlot = holder.findFirstEmptyVaultSlot();
-        if (targetSlot < 0) {
-            if (holder.purchasableRow() < VaultSlotAccess.maxRows()) {
-                player.sendMessage(MiniMessage.miniMessage().deserialize(
-                        "<red>Your unlocked vault space is full.</red> <gray>Purchase the next row to store more items.</gray>"
-                ));
-            } else {
-                player.sendMessage(MiniMessage.miniMessage().deserialize("<red>Your vault is completely full.</red>"));
+        int deposited = VaultDepositHelper.deposit(holder, stack.clone(), preferredVaultIndex);
+        if (deposited <= 0) {
+            if (holder.findFirstEmptyVaultSlot() < 0 && !hasMergeRoom(holder, stack)) {
+                if (holder.purchasableRow() < VaultSlotAccess.maxRows()) {
+                    player.sendMessage(MiniMessage.miniMessage().deserialize(
+                            "<red>Your unlocked vault space is full.</red> <gray>Purchase the next row to store more items.</gray>"
+                    ));
+                } else {
+                    player.sendMessage(MiniMessage.miniMessage().deserialize("<red>Your vault is completely full.</red>"));
+                }
             }
-            return false;
+            return 0;
         }
-        holder.put(targetSlot, stack.clone());
-        holder.setPage(holder.pageForVaultIndex(targetSlot));
-        VaultLayout.render(holder.getInventory(), holder);
-        player.updateInventory();
-        return true;
+        repaintFromHolder(holder);
+        this.guiManager.refresh(player);
+        return deposited;
+    }
+
+    /**
+     * Repaints the GUI from holder state after a direct holder mutation. Skipping
+     * {@link VaultHolder#resetInventorySync()} here would let {@link VaultLayout#render} sync the
+     * stale (pre-mutation) inventory back over the holder and erase the change — the "vanishing
+     * deposit" bug.
+     */
+    private static void repaintFromHolder(VaultHolder holder) {
+        Inventory inventory = holder.getInventory();
+        if (inventory != null) {
+            holder.resetInventorySync();
+            VaultLayout.render(inventory, holder);
+        }
+    }
+
+    /** Sweeps remaining similar stacks from the player inventory after a shift-double-click burst. */
+    public int depositAllMatchingFromInventory(Player player, VaultHolder holder, ItemStack reference) {
+        if (player == null || holder == null || reference == null || reference.getType().isAir()) {
+            return 0;
+        }
+        int total = 0;
+        ItemStack[] contents = player.getInventory().getStorageContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (stack == null || stack.getType().isAir() || !stack.isSimilar(reference)) {
+                continue;
+            }
+            if (this.plugin.coreHotbarService() != null && this.plugin.coreHotbarService().isServerItem(stack)) {
+                continue;
+            }
+            int deposited = depositStack(player, holder, stack, -1);
+            if (deposited <= 0) {
+                break;
+            }
+            int removed = GuiClickInventory.consumePlayerSlot(player, slot, deposited);
+            total += removed;
+            if (removed < deposited) {
+                revertDeposit(holder, stack, deposited - removed);
+            }
+        }
+        return total;
+    }
+
+    public void revertDeposit(VaultHolder holder, ItemStack reference, int amount) {
+        if (holder == null || reference == null || amount <= 0) {
+            return;
+        }
+        int remaining = amount;
+        int limit = holder.depositableSlotLimit();
+        for (int index = limit - 1; index >= 0 && remaining > 0; index--) {
+            ItemStack stored = holder.get(index);
+            if (stored == null || !stored.isSimilar(reference)) {
+                continue;
+            }
+            int remove = Math.min(remaining, stored.getAmount());
+            int left = stored.getAmount() - remove;
+            if (left <= 0) {
+                holder.remove(index);
+            } else {
+                ItemStack updated = stored.clone();
+                updated.setAmount(left);
+                holder.put(index, updated);
+            }
+            remaining -= remove;
+        }
+        // Repaint immediately: the deposit was already rendered into the GUI, and a later live-sync
+        // would read it back into the holder, silently undoing this rollback (dupe).
+        repaintFromHolder(holder);
+    }
+
+    private static boolean hasMergeRoom(VaultHolder holder, ItemStack stack) {
+        int limit = holder.depositableSlotLimit();
+        for (int index = 0; index < limit; index++) {
+            ItemStack existing = holder.get(index);
+            if (existing != null
+                    && existing.isSimilar(stack)
+                    && existing.getAmount() < existing.getMaxStackSize()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void scheduleInventoryResync(Player player) {
@@ -356,6 +463,9 @@ public final class VaultGuiService {
         this.plugin.platformScheduler().runOnPlayerLater(player, player::updateInventory, 1L);
     }
 
+    /** Last persisted content checksum per player; unchanged snapshots never hit the DB. */
+    private final Map<UUID, String> lastSavedChecksum = new java.util.concurrent.ConcurrentHashMap<>();
+
     private void save(UUID playerId, Map<Integer, ItemStack> items) {
         Map<Integer, String> encoded = new HashMap<>();
         items.forEach((index, item) -> {
@@ -363,8 +473,15 @@ public final class VaultGuiService {
                 encoded.put(index, ItemStackCodec.encode(item));
             }
         });
-        long revision = this.saveSequence.incrementAndGet();
         String checksum = this.checksum(encoded);
+        // Redundant-write guard: repeated closes/back-navigation with identical content
+        // produced overlapping bulk rewrites that deadlocked in the DB. Only dirty
+        // snapshots are persisted.
+        if (checksum.equals(this.lastSavedChecksum.get(playerId))) {
+            return;
+        }
+        this.lastSavedChecksum.put(playerId, checksum);
+        long revision = this.saveSequence.incrementAndGet();
         this.repository.saveContainerBulk(playerId, PlayerInventoryManager.CONTAINER_VAULT, encoded, revision, checksum);
     }
 
@@ -377,6 +494,11 @@ public final class VaultGuiService {
             try {
                 ItemStack item = ItemStackCodec.decode(payload);
                 if (item != null && !item.getType().isAir()) {
+                    // Vault stacks are stored fully serialized; modernize custom items whose
+                    // display material/model changed since they were deposited.
+                    if (this.plugin.customItemService() != null) {
+                        item = this.plugin.customItemService().reconcile(item);
+                    }
                     decoded.put(index, item);
                 }
             } catch (RuntimeException ignored) {

@@ -21,6 +21,8 @@ import network.skypvp.proxy.chat.ProxyChatFormatService;
 import network.skypvp.proxy.registry.NetworkStateRegistry;
 import network.skypvp.proxy.repository.ServerRegistryRepository;
 import network.skypvp.shared.BrandStyle;
+import network.skypvp.shared.BreachDisconnectedPresenceEvent;
+import network.skypvp.shared.BreachSpectatorPresenceEvent;
 import network.skypvp.shared.ChatFormatRefreshEvent;
 import network.skypvp.shared.JsonCodec;
 import network.skypvp.shared.NetworkChannels;
@@ -61,14 +63,22 @@ public final class RedisNetworkEventSubscriber implements AutoCloseable {
    private final network.skypvp.proxy.service.ProxyPrivateMessageService privateMessageService;
    private final network.skypvp.proxy.service.ProxyChatTranslationDeliveryService translationDeliveryService;
    private final String drainingChannel;
+   private final String breachDisconnectedChannel;
+   private final String breachLegacyAwayChannel;
+   private final String breachSpectatorChannel;
    private final Map<String, InetSocketAddress> dynamicBackends = new ConcurrentHashMap<>();
    private volatile boolean running;
    private JedisPubSub pubSub;
    private Thread worker;
    private network.skypvp.proxy.service.ProxyHoldService proxyHoldService;
+   private network.skypvp.proxy.service.ServerDrainMigrationService drainMigrationService;
 
    public void setProxyHoldService(network.skypvp.proxy.service.ProxyHoldService proxyHoldService) {
       this.proxyHoldService = proxyHoldService;
+   }
+
+   public void setDrainMigrationService(network.skypvp.proxy.service.ServerDrainMigrationService drainMigrationService) {
+      this.drainMigrationService = drainMigrationService;
    }
 
    public RedisNetworkEventSubscriber(
@@ -159,6 +169,9 @@ public final class RedisNetworkEventSubscriber implements AutoCloseable {
       this.reportsChannel = "SkyPvP:network:reports";
       this.vanishChannel = "SkyPvP:network:vanish";
       this.drainingChannel = network.skypvp.shared.NetworkChannels.SERVER_DRAINING;
+      this.breachDisconnectedChannel = NetworkChannels.BREACH_DISCONNECTED_PRESENCE;
+      this.breachLegacyAwayChannel = NetworkChannels.BREACH_AWAY_PRESENCE;
+      this.breachSpectatorChannel = NetworkChannels.BREACH_SPECTATOR_PRESENCE;
       this.proxyServer = proxyServer;
       this.serverRoutingService = serverRoutingService;
       this.socialSettingsRepository = socialSettingsRepository;
@@ -199,7 +212,7 @@ public final class RedisNetworkEventSubscriber implements AutoCloseable {
             this.logger.info("Subscribing to Redis channels: '{}', '{}' and '{}'", this.sessionChannel, this.heartbeatChannel, this.rankChannel);
             this.logger.info("Subscribing to Redis channels: session, heartbeat, ranks, reports, chat, partychat, socialsettings, chatformats, privatemessage, vanish, draining");
             jedis.subscribe(
-               this.pubSub, this.sessionChannel, this.heartbeatChannel, this.rankChannel, this.reportsChannel, this.chatChannel, this.partyChatChannel, this.socialSettingsChannel, this.chatFormatChannel, this.privateMessageChannel, this.vanishChannel, this.drainingChannel
+               this.pubSub, this.sessionChannel, this.heartbeatChannel, this.rankChannel, this.reportsChannel, this.chatChannel, this.partyChatChannel, this.socialSettingsChannel, this.chatFormatChannel, this.privateMessageChannel, this.vanishChannel, this.drainingChannel, this.breachDisconnectedChannel, this.breachLegacyAwayChannel, this.breachSpectatorChannel
             );
          } catch (Exception var7) {
             if (this.running) {
@@ -280,6 +293,18 @@ public final class RedisNetworkEventSubscriber implements AutoCloseable {
             return;
          }
 
+         if (this.breachDisconnectedChannel.equals(channel) || this.breachLegacyAwayChannel.equals(channel)) {
+            BreachDisconnectedPresenceEvent disconnectedEvent = JsonCodec.gson().fromJson(payload, BreachDisconnectedPresenceEvent.class);
+            this.stateRegistry.applyBreachDisconnectedPresence(disconnectedEvent);
+            return;
+         }
+
+         if (this.breachSpectatorChannel.equals(channel)) {
+            BreachSpectatorPresenceEvent spectatorEvent = JsonCodec.gson().fromJson(payload, BreachSpectatorPresenceEvent.class);
+            this.stateRegistry.applyBreachSpectatorPresence(spectatorEvent);
+            return;
+         }
+
          if (this.drainingChannel.equals(channel) && this.proxyServer != null) {
             this.handleServerDraining(payload);
          }
@@ -295,6 +320,11 @@ public final class RedisNetworkEventSubscriber implements AutoCloseable {
             return;
          }
 
+         if (this.drainMigrationService != null) {
+            this.drainMigrationService.handleServerDraining(evt);
+            return;
+         }
+
          if (this.serverRoutingService != null) {
             this.serverRoutingService.markServerAsDraining(evt.serverId());
          }
@@ -303,7 +333,7 @@ public final class RedisNetworkEventSubscriber implements AutoCloseable {
             this.logger.info("[Lifecycle] Draining server {} via proxy...", evt.serverId());
             for (com.velocitypowered.api.proxy.Player p : server.getPlayersConnected()) {
                if (this.serverRoutingService != null) {
-                  java.util.Optional<com.velocitypowered.api.proxy.server.RegisteredServer> target = this.serverRoutingService.selectFallback(evt.serverId());
+                  java.util.Optional<com.velocitypowered.api.proxy.server.RegisteredServer> target = this.serverRoutingService.selectDrainTarget(evt.serverId());
                   if (target.isPresent()) {
                      p.sendMessage(ServerTextUtil.component("&aServer is restarting. Moving you to &e" + target.get().getServerInfo().getName() + "&a..."));
                      p.createConnectionRequest(target.get()).fireAndForget();
@@ -394,6 +424,7 @@ public final class RedisNetworkEventSubscriber implements AutoCloseable {
             }
          });
          this.stateRegistry.pruneStaleHeartbeats(staleCutoffEpochMillis);
+         this.stateRegistry.pruneStaleBreachReconnectHints(staleCutoffEpochMillis);
       }
    }
 

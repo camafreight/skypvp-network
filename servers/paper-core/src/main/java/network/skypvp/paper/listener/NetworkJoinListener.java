@@ -51,30 +51,37 @@ public final class NetworkJoinListener implements Listener {
    public void onPreLogin(AsyncPlayerPreLoginEvent event) {
       if (this.plugin.gracefulDrainService() != null && this.plugin.gracefulDrainService().isDraining()) {
          event.disallow(Result.KICK_OTHER, ServerTextUtil.component("&cServer is restarting/draining. Please join another server."));
-      } else {
-         PlayerProfile profile = event.getPlayerProfile();
-         boolean hasSkin = false;
+         return;
+      }
+      if (this.plugin.worldStateService() != null && !this.plugin.worldStateService().isJoinableForRouting()) {
+         event.disallow(
+            Result.KICK_OTHER,
+            ServerTextUtil.component("&eThis server is still starting up. Please wait a moment...")
+         );
+         return;
+      }
+      PlayerProfile profile = event.getPlayerProfile();
+      boolean hasSkin = false;
 
-         for (ProfileProperty prop : profile.getProperties()) {
-            if ("textures".equals(prop.getName())) {
-               hasSkin = true;
-               break;
-            }
+      for (ProfileProperty prop : profile.getProperties()) {
+         if ("textures".equals(prop.getName())) {
+            hasSkin = true;
+            break;
          }
+      }
 
-         if (!hasSkin) {
-            try {
-               PlayerProfile skinLookup = Bukkit.createProfile(event.getName());
-               skinLookup.complete(true);
+      if (!hasSkin) {
+         try {
+            PlayerProfile skinLookup = Bukkit.createProfile(event.getName());
+            skinLookup.complete(true);
 
-               for (ProfileProperty propx : skinLookup.getProperties()) {
-                  if ("textures".equals(propx.getName())) {
-                     profile.setProperty(propx);
-                     break;
-                  }
+            for (ProfileProperty propx : skinLookup.getProperties()) {
+               if ("textures".equals(propx.getName())) {
+                  profile.setProperty(propx);
+                  break;
                }
-            } catch (Exception var7) {
             }
+         } catch (Exception var7) {
          }
       }
    }

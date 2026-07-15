@@ -61,6 +61,10 @@ ext {
         it
     }
     sparkPluginDir = rootDir.toPath().resolve('vendor/spark')
+    mythicPluginVersions = new Properties().with {
+        file('vendor/mythic-plugins/versions.properties').withInputStream { load(it) }
+        it
+    }
 }
 
 task downloadBedrockPlugins {
@@ -325,6 +329,67 @@ task downloadSparkFoliaPlugin {
     }
 }
 
+task downloadLibsDisguisesPlugin {
+    group = 'deployment'
+    description = 'Downloads LibsDisguises (Folia-capable Jenkins build) into config/server-templates/extraction/plugins/.'
+
+    doLast {
+        def dstDir = rootDir.toPath().resolve('config/server-templates/extraction/plugins')
+        dstDir.toFile().mkdirs()
+        def jarName = mythicPluginVersions['libsdisguises.jar']
+        def url = mythicPluginVersions['libsdisguises.url']
+        def dst = dstDir.resolve(jarName).toFile()
+
+        dstDir.toFile().listFiles()?.findAll {
+            it.isFile() && it.name ==~ /(?i)LibsDisguises.*\.jar/ && it.name != jarName
+        }?.each {
+            logger.lifecycle("[downloadLibsDisguisesPlugin] removing stale ${it.name}")
+            it.delete()
+        }
+
+        // Cache-first: the Jenkins host is flaky (HTTP 530s). A valid local jar means the
+        // build must not depend on the network at all.
+        if (dst.isFile() && dst.length() >= 100_000L) {
+            logger.lifecycle("[downloadLibsDisguisesPlugin] using cached ${jarName} (${dst.length()} bytes); delete it to force a re-download")
+            return
+        }
+
+        // Download to a temp file so a failed/partial fetch can never clobber dst.
+        logger.lifecycle("[downloadLibsDisguisesPlugin] ${url}")
+        def tmp = new File(dst.parentFile, jarName + '.download')
+        try {
+            tmp.withOutputStream { out ->
+                new URL(url).withInputStream { inp -> out << inp }
+            }
+        } catch (IOException fetchError) {
+            tmp.delete()
+            throw new GradleException("LibsDisguises download failed (${fetchError.message}) and no cached ${jarName} exists in config/server-templates/extraction/plugins/. Place the jar there manually or retry when ${url} is reachable.")
+        }
+        if (tmp.length() < 100_000L) {
+            long size = tmp.length()
+            tmp.delete()
+            throw new GradleException("Downloaded ${jarName} looks invalid (size=${size})")
+        }
+        java.nio.file.Files.move(tmp.toPath(), dst.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+
+        def pluginYmlText = null
+        new java.util.zip.ZipInputStream(new FileInputStream(dst)).withCloseable { zis ->
+            java.util.zip.ZipEntry entry
+            while ((entry = zis.nextEntry) != null) {
+                if (entry.name == 'plugin.yml') {
+                    pluginYmlText = zis.getText('UTF-8')
+                    break
+                }
+            }
+        }
+        if (pluginYmlText == null || !pluginYmlText.contains('folia-supported: true')) {
+            dst.delete()
+            throw new GradleException("Downloaded ${jarName} does not declare folia-supported: true — use a LibsDisguises build with native Folia support")
+        }
+        logger.lifecycle("[downloadLibsDisguisesPlugin] ${jarName} → config/server-templates/extraction/plugins/")
+    }
+}
+
 task stageSparkFoliaPlugin {
     group = 'deployment'
     description = 'Copies spark-folia jar into config/server-templates/extraction/plugins/.'
@@ -371,7 +436,8 @@ task deployJars {
               stageFoliaJar,
               stageSparkFoliaPlugin,
               downloadPacketEventsPlugin,
-              downloadWorldsPlugin
+              downloadWorldsPlugin,
+              downloadLibsDisguisesPlugin
 
     doLast {
         def templates = rootDir.toPath().resolve('config/server-templates')
@@ -382,7 +448,7 @@ task deployJars {
         def extractionJar = project(':servers:paper-extraction').tasks.named('shadowJar').get().archiveFile.get().asFile
         def proxyJar   = project(':proxy:velocity-core').tasks.named('shadowJar').get().archiveFile.get().asFile
         def vendoredLimboJar = rootDir.toPath().resolve('vendor/limboapi-fork/plugin/build/libs/skypvp-limboapi.jar').toFile()
-        def skypvpWebPluginJar = new File('E:/Minecraft/skypvp-web/skypvp-web-plugin/build/libs/skypvp-web-plugin.jar')
+        def skypvpWebPluginJar = new File(rootDir, '../skypvp-web/skypvp-web-plugin/build/libs/skypvp-web-plugin.jar')
         if (!vendoredLimboJar.exists()) {
             throw new GradleException("Vendored SkyPvP limbo jar was not built: ${vendoredLimboJar.absolutePath}")
         }

@@ -20,7 +20,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.library.packet.PacketGlowTeams;
 import network.skypvp.paper.library.packet.PacketFakeMob;
-import network.skypvp.paper.library.packet.PacketFakePlayer;
+import network.skypvp.paper.library.npc.FakePlayerNpc;
 import network.skypvp.paper.model.HologramDefinition;
 import network.skypvp.paper.model.NpcDefinition;
 import network.skypvp.paper.model.WorldPoint;
@@ -81,7 +81,7 @@ public final class NpcLibrary implements Listener {
    private final NamespacedKey blockPropAnchorKey;
    private PlatformTask facePlayerTask;
    private PlatformTask rainbowTask;
-   private final Map<String, PacketFakePlayer> fakePlayers = new HashMap<>();
+   private final Map<String, FakePlayerNpc> fakePlayers = new HashMap<>();
    private final Map<String, PacketFakeMob> fakeMobs = new HashMap<>();
    private final Map<String, LivingEntity> activeEntities = new ConcurrentHashMap<>();
    private final Map<String, Entity> activeNonPlayerEntities = new ConcurrentHashMap<>();
@@ -105,6 +105,12 @@ public final class NpcLibrary implements Listener {
    private final Map<UUID, Long> lastInteractMs = new ConcurrentHashMap<>();
    /** Tracks Bukkit showEntity/hideEntity per viewer so we don't re-send every distance tick. */
    private final Set<String> entityShownToViewer = ConcurrentHashMap.newKeySet();
+   /**
+    * Chunk-border oscillation can reload the same chunk repeatedly. Debounce full NPC rebuild/resync
+    * so hub F3+3 ping spikes aren't amplified by fake-player tab+spawn packets every step.
+    */
+   private static final long CHUNK_LOAD_DEBOUNCE_MS = 2_500L;
+   private final ConcurrentHashMap<String, Long> lastChunkNpcApplyMs = new ConcurrentHashMap<>();
 
    public NpcLibrary(PaperCorePlugin plugin) {
       this.plugin = plugin;
@@ -128,7 +134,12 @@ public final class NpcLibrary implements Listener {
       String worldName = world.getName();
       int cx = chunk.getX();
       int cz = chunk.getZ();
+      String chunkKey = worldName + ':' + cx + ':' + cz;
+      long now = System.currentTimeMillis();
+      Long previous = this.lastChunkNpcApplyMs.get(chunkKey);
+      boolean debounced = previous != null && now - previous < CHUNK_LOAD_DEBOUNCE_MS;
       boolean touchedNpc = false;
+      boolean needsIndexRebuild = false;
 
       for (NpcDefinition def : this.activeDefinitions.values()) {
          if (def.location != null && worldName.equals(def.location.world)) {
@@ -140,9 +151,16 @@ public final class NpcLibrary implements Listener {
                Location location = this.toLocation(world, def.location);
                if ("PLAYER".equalsIgnoreCase(def.entityType)) {
                   Interaction existing = this.activeInteractions.get(id);
-                  if (existing == null || !existing.isValid() || existing.isDead()) {
+                  boolean interactionAlive = existing != null && existing.isValid() && !existing.isDead();
+                  if (debounced && interactionAlive) {
+                     // Chunk re-entered within debounce window and hitbox still valid — skip rebuild.
+                     continue;
+                  }
+                  boolean viewerResync = false;
+                  if (!interactionAlive) {
                      this.cleanSpawnArea(location, 1.0);
                      existing = (Interaction)this.spawnNpc(world, def, location);
+                     viewerResync = true;
                   }
 
                   if (existing != null) {
@@ -154,7 +172,7 @@ public final class NpcLibrary implements Listener {
                         }
                      }
                      this.applyMetadata(existing, def, boards);
-                     PacketFakePlayer fake = this.fakePlayers.get(id);
+                     FakePlayerNpc fake = this.fakePlayers.get(id);
                      if (fake == null || !fake.matchesGlow(def.glow, def.glowColor)) {
                         if (fake != null) {
                            for (Player viewer : Bukkit.getOnlinePlayers()) {
@@ -162,20 +180,58 @@ public final class NpcLibrary implements Listener {
                            }
                         }
                         String profileName = id.length() > 16 ? id.substring(0, 16) : id;
-                        fake = new PacketFakePlayer(this.plugin, profileName, def.skinUrl, def.skinSignature, location, def.glow, def.glowColor);
+                        fake = new FakePlayerNpc(this.plugin, profileName, def.skinUrl, def.skinSignature, location, def.glow, def.glowColor);
                         this.fakePlayers.put(id, fake);
+                        viewerResync = true;
                      }
                      this.syncFakePlayerGlowTeams(fake, def);
-                     this.plugin.platform().runForNearbyPlayers(location, NpcDistanceIndex.VISIBILITY_RADIUS_SQ, fake::resync);
+                     // Only blast nearby viewers when something actually changed — border oscillation
+                     // used to call fake::resync every ChunkLoad and spam tab+spawn packets.
+                     if (viewerResync) {
+                        this.plugin.platform().runForNearbyPlayers(location, NpcDistanceIndex.VISIBILITY_RADIUS_SQ, fake::resync);
+                        needsIndexRebuild = true;
+                     }
+                  }
+               } else if (isBlockNpcType(def.entityType)) {
+                  Interaction existingHitbox = this.activeInteractions.get(id);
+                  boolean hitboxAlive = existingHitbox != null && existingHitbox.isValid() && !existingHitbox.isDead();
+                  Entity blockDisplay = this.activeNonPlayerEntities.get(id);
+                  boolean displayAlive = blockDisplay instanceof BlockDisplay && blockDisplay.isValid() && !blockDisplay.isDead();
+                  if (debounced && hitboxAlive && displayAlive) {
+                     continue;
+                  }
+                  if (!hitboxAlive) {
+                     this.cleanSpawnArea(location, 1.0);
+                     this.spawnInteractionHitbox(world, def, location);
+                     needsIndexRebuild = true;
+                  }
+                  if (!displayAlive) {
+                     this.destroyMobNpc(id);
+                     this.configureBlockNpc(id, def, location);
+                     needsIndexRebuild = true;
                   }
                } else {
                   Interaction existingHitbox = this.activeInteractions.get(id);
-                  if (existingHitbox == null || !existingHitbox.isValid() || existingHitbox.isDead()) {
+                  boolean hitboxAlive = existingHitbox != null && existingHitbox.isValid() && !existingHitbox.isDead();
+                  Entity mobDisplay = this.activeNonPlayerEntities.get(id);
+                  if (mobDisplay == null) {
+                     mobDisplay = this.activeEntities.get(id);
+                  }
+                  boolean displayAlive = mobDisplay != null && mobDisplay.isValid() && !mobDisplay.isDead();
+                  if (debounced && hitboxAlive && displayAlive) {
+                     continue;
+                  }
+                  if (!hitboxAlive) {
                      this.cleanSpawnArea(location, 1.0);
                      this.spawnInteractionHitbox(world, def, location);
+                     needsIndexRebuild = true;
                   }
-                  this.removeMobDisplayEntity(id);
-                  this.configureMobNpc(id, def, location);
+                  if (!displayAlive) {
+                     this.removeMobDisplayEntity(id);
+                     this.removeBlockNpcDisplay(id);
+                     this.configureMobNpc(id, def, location);
+                     needsIndexRebuild = true;
+                  }
                }
             }
          }
@@ -184,8 +240,11 @@ public final class NpcLibrary implements Listener {
       // Non-persistent NPC interactions are removed when their chunk unloads and re-spawned here on
       // reload. The distance index caches entity references, so without this re-sync it keeps pointing
       // at the now-dead entity (forEachNear skips dead entities => packet NPC body never shows again).
-      if (touchedNpc) {
+      if (touchedNpc && needsIndexRebuild) {
          this.rebuildDistanceIndex(world);
+         this.lastChunkNpcApplyMs.put(chunkKey, now);
+      } else if (touchedNpc && !debounced) {
+         this.lastChunkNpcApplyMs.put(chunkKey, now);
       }
 
       for (StoredBlockProp definition : this.blockPropDefinitions.values()) {
@@ -195,6 +254,9 @@ public final class NpcLibrary implements Listener {
          int propCx = definition.blockAnchor().getBlockX() >> 4;
          int propCz = definition.blockAnchor().getBlockZ() >> 4;
          if (propCx == cx && propCz == cz) {
+            if (debounced) {
+               continue;
+            }
             this.ensureBlockProp(definition.id());
          }
       }
@@ -246,7 +308,7 @@ public final class NpcLibrary implements Listener {
       String worldName = playerWorld.getName();
       for (Entry<String, NpcDefinition> entry : this.activeDefinitions.entrySet()) {
          String id = entry.getKey();
-         PacketFakePlayer fake = this.fakePlayers.get(id);
+         FakePlayerNpc fake = this.fakePlayers.get(id);
          if (fake == null) {
             continue;
          }
@@ -455,7 +517,7 @@ public final class NpcLibrary implements Listener {
       if (world == null) {
          return;
       }
-      PacketFakePlayer fake = this.fakePlayers.get(id);
+      FakePlayerNpc fake = this.fakePlayers.get(id);
       PacketFakeMob fakeMob = this.fakeMobs.get(id);
 
       if (fake != null || fakeMob != null) {
@@ -529,7 +591,7 @@ public final class NpcLibrary implements Listener {
          && entity.getWorld().equals(pWorld)
          && pLoc.distanceSquared(entity.getLocation()) <= NpcDistanceIndex.VISIBILITY_RADIUS_SQ;
 
-      PacketFakePlayer fake = this.fakePlayers.get(id);
+      FakePlayerNpc fake = this.fakePlayers.get(id);
       PacketFakeMob fakeMob = this.fakeMobs.get(id);
       String entityVisibilityKey = player.getUniqueId() + ":" + id;
       if (inRange) {
@@ -603,7 +665,7 @@ public final class NpcLibrary implements Listener {
       String worldName = pWorld.getName();
       for (Entry<String, NpcDefinition> entry : this.activeDefinitions.entrySet()) {
          String id = entry.getKey();
-         PacketFakePlayer fake = this.fakePlayers.get(id);
+         FakePlayerNpc fake = this.fakePlayers.get(id);
          PacketFakeMob fakeMob = this.fakeMobs.get(id);
          if (fake == null && fakeMob == null) {
             continue;
@@ -922,9 +984,9 @@ public final class NpcLibrary implements Listener {
       }
    }
 
-   private void syncFakePlayerGlowTeams(PacketFakePlayer fake, NpcDefinition def) {
+   private void syncFakePlayerGlowTeams(FakePlayerNpc fake, NpcDefinition def) {
       if (this.plugin.platform().isFolia()) {
-         // Solid-color glow + nametag hide are applied per-viewer from PacketFakePlayer#showTo.
+         // Solid-color glow + nametag hide are applied per-viewer from FakePlayerNpc#showTo.
          return;
       }
       if (!def.glow || def.glowColor == null || def.glowColor.isBlank()) {
@@ -947,7 +1009,7 @@ public final class NpcLibrary implements Listener {
       this.syncFakePlayerGlowTeamsOnBoards(fake, def, boards);
    }
 
-   private void syncFakePlayerGlowTeamsOnBoards(PacketFakePlayer fake, NpcDefinition def, List<Scoreboard> boards) {
+   private void syncFakePlayerGlowTeamsOnBoards(FakePlayerNpc fake, NpcDefinition def, List<Scoreboard> boards) {
       for (Scoreboard board : boards) {
          for (Team existingTeam : board.getTeams()) {
             if (existingTeam.getName().startsWith("npc_")) {
@@ -980,7 +1042,7 @@ public final class NpcLibrary implements Listener {
       this.rainbowEntries.put(fake.getProfileName(), 0);
    }
 
-   private void publishFakePlayerToNearbyViewers(PacketFakePlayer fake, Location location) {
+   private void publishFakePlayerToNearbyViewers(FakePlayerNpc fake, Location location) {
       this.plugin.platform().runForNearbyPlayers(location, NpcDistanceIndex.VISIBILITY_RADIUS_SQ, fake::resync);
    }
 
@@ -1058,7 +1120,7 @@ public final class NpcLibrary implements Listener {
                this.activeEntities.remove(key);
                this.activeInteractions.remove(key);
                deletedNpcIds.add(key);
-               PacketFakePlayer fake = this.fakePlayers.remove(key);
+               FakePlayerNpc fake = this.fakePlayers.remove(key);
                if (fake != null) {
                   for (Player p : Bukkit.getOnlinePlayers()) {
                      fake.destroy(p);
@@ -1081,7 +1143,7 @@ public final class NpcLibrary implements Listener {
                   entity.remove();
                   this.activeEntities.remove(key);
                   this.activeInteractions.remove(key);
-                  PacketFakePlayer fake = this.fakePlayers.remove(key);
+                  FakePlayerNpc fake = this.fakePlayers.remove(key);
                   if (fake != null) {
                      for (Player p : Bukkit.getOnlinePlayers()) {
                         fake.destroy(p);
@@ -1123,7 +1185,7 @@ public final class NpcLibrary implements Listener {
                this.spawnNpc(world, defx, location);
             }
 
-            PacketFakePlayer fake = this.fakePlayers.remove(id);
+            FakePlayerNpc fake = this.fakePlayers.remove(id);
             if (fake != null) {
                for (Player p : Bukkit.getOnlinePlayers()) {
                   fake.destroy(p);
@@ -1131,11 +1193,34 @@ public final class NpcLibrary implements Listener {
             }
 
             String profileName = id.length() > 16 ? id.substring(0, 16) : id;
-            PacketFakePlayer newFake = new PacketFakePlayer(this.plugin, profileName, defx.skinUrl, defx.skinSignature, location, defx.glow, defx.glowColor);
+            FakePlayerNpc newFake = new FakePlayerNpc(this.plugin, profileName, defx.skinUrl, defx.skinSignature, location, defx.glow, defx.glowColor);
             this.fakePlayers.put(id, newFake);
 
             this.syncFakePlayerGlowTeams(newFake, defx);
             this.plugin.platform().runForNearbyPlayers(location, NpcDistanceIndex.VISIBILITY_RADIUS_SQ, newFake::resync);
+            this.destroyMobNpc(id);
+            this.removeBlockNpcDisplay(id);
+         } else if (isBlockNpcType(defx.entityType)) {
+            Interaction existingHitbox = existingInteractionsById.get(id);
+            if (existingHitbox != null && existingHitbox.isValid() && !existingHitbox.isDead()) {
+               if (this.plugin.platform().isFolia()) {
+                  existingHitbox.teleportAsync(location);
+               } else {
+                  existingHitbox.teleport(location);
+               }
+               this.writeInteractionMetadata(existingHitbox, defx);
+            } else {
+               this.cleanSpawnArea(location, 1.0);
+               this.spawnInteractionHitbox(world, defx, location);
+            }
+            FakePlayerNpc fake = this.fakePlayers.remove(id);
+            if (fake != null) {
+               for (Player p : Bukkit.getOnlinePlayers()) {
+                  fake.destroy(p);
+               }
+            }
+            this.destroyMobNpc(id);
+            this.configureBlockNpc(id, defx, location);
          } else {
             Interaction existingHitbox = existingInteractionsById.get(id);
             if (existingHitbox != null && existingHitbox.isValid() && !existingHitbox.isDead()) {
@@ -1151,6 +1236,7 @@ public final class NpcLibrary implements Listener {
             }
 
             this.removeMobDisplayEntity(id);
+            this.removeBlockNpcDisplay(id);
             this.configureMobNpc(id, defx, location);
          }
       }
@@ -1163,8 +1249,16 @@ public final class NpcLibrary implements Listener {
             holo.id = defx.id + "_holo";
             holo.parentId = defx.id;
             holo.anchor = defx.location;
-            holo.offsetY = 2.2;
+            holo.offsetY = isBlockNpcType(defx.entityType) ? 1.15 : 2.2;
             holo.lines = new ArrayList<>(defx.hologramLines);
+            holo.background = defx.hologramBackground;
+            holo.seeThrough = defx.hologramSeeThrough;
+            holo.shadowed = defx.hologramShadowed;
+            holo.textAlignment = defx.hologramAlignment != null ? defx.hologramAlignment : "CENTER";
+            holo.viewRange = defx.hologramViewRange > 0.0F ? defx.hologramViewRange : 1.0F;
+            holo.freeze = defx.hologramFreeze;
+            holo.billboard = defx.hologramBillboard != null ? defx.hologramBillboard : "CENTER";
+            holo.scale = defx.hologramScale > 0.0D ? defx.hologramScale : 1.0D;
             holoDefs.add(holo);
          }
       }
@@ -1199,6 +1293,13 @@ public final class NpcLibrary implements Listener {
             worldDisplays.put(entry.getKey(), entity);
          }
       }
+      // BlockDisplay NPCs are not LivingEntity — include them so showEntity() runs for the visual.
+      for (Entry<String, Entity> entry : this.activeNonPlayerEntities.entrySet()) {
+         Entity entity = entry.getValue();
+         if (entity != null && entity.isValid() && !entity.isDead() && world.equals(entity.getWorld())) {
+            worldDisplays.putIfAbsent(entry.getKey(), entity);
+         }
+      }
       this.distanceIndex.rebuildWorld(world, worldInteractions, worldDisplays);
       for (NpcBlockPropHandle prop : this.activeBlockProps.values()) {
          if (prop.blockAnchor().getWorld() == null || !prop.blockAnchor().getWorld().equals(world)) {
@@ -1212,7 +1313,7 @@ public final class NpcLibrary implements Listener {
       if (player == null) {
          return;
       }
-      for (PacketFakePlayer fake : this.fakePlayers.values()) {
+      for (FakePlayerNpc fake : this.fakePlayers.values()) {
          fake.destroy(player);
       }
       for (PacketFakeMob fake : this.fakeMobs.values()) {
@@ -1263,10 +1364,87 @@ public final class NpcLibrary implements Listener {
       if (def == null || def.entityType == null || def.entityType.isBlank()) {
          return EntityType.VILLAGER;
       }
+      if (isBlockNpcType(def.entityType)) {
+         return EntityType.VILLAGER;
+      }
       try {
          return EntityType.valueOf(def.entityType.toUpperCase(Locale.ROOT));
       } catch (IllegalArgumentException ex) {
          return EntityType.VILLAGER;
+      }
+   }
+
+   /** True when {@code type} is a BlockDisplay NPC such as {@code CHEST} or {@code BLOCK:CHEST}. */
+   public static boolean isBlockNpcType(String type) {
+      return resolveBlockMaterial(type) != null;
+   }
+
+   public static Material resolveBlockMaterial(String type) {
+      if (type == null || type.isBlank()) {
+         return null;
+      }
+      String normalized = type.trim().toUpperCase(Locale.ROOT);
+      if (normalized.startsWith("BLOCK:")) {
+         normalized = normalized.substring("BLOCK:".length()).trim();
+      }
+      if (normalized.isEmpty()) {
+         return null;
+      }
+      try {
+         EntityType.valueOf(normalized);
+         // Prefer real entity types over materials that share names (rare).
+         return null;
+      } catch (IllegalArgumentException ignored) {
+      }
+      try {
+         Material material = Material.valueOf(normalized);
+         return material.isBlock() ? material : null;
+      } catch (IllegalArgumentException ignored) {
+         return null;
+      }
+   }
+
+   private void configureBlockNpc(String id, NpcDefinition def, Location location) {
+      Material material = resolveBlockMaterial(def.entityType);
+      if (material == null || location == null || location.getWorld() == null) {
+         return;
+      }
+      this.removeBlockNpcDisplay(id);
+      float scale = def.scale <= 0.0D ? 1.0F : (float) def.scale;
+      World world = location.getWorld();
+      Location spawnAt = location.clone();
+      BlockDisplay display = world.spawn(spawnAt, BlockDisplay.class, entity -> {
+         entity.setBlock(material.createBlockData());
+         entity.setBillboard(Billboard.FIXED);
+         entity.setPersistent(false);
+         entity.setInvulnerable(true);
+         entity.setSilent(true);
+         entity.setGravity(false);
+         entity.setTeleportDuration(0);
+         entity.setInterpolationDuration(0);
+         entity.setTransformation(
+            new Transformation(
+               new Vector3f(-0.5F * scale, 0.0F, -0.5F * scale),
+               new AxisAngle4f(0.0F, 0.0F, 0.0F, 1.0F),
+               new Vector3f(scale, scale, scale),
+               new AxisAngle4f(0.0F, 0.0F, 0.0F, 1.0F)
+            )
+         );
+         PersistentDataContainer pdc = entity.getPersistentDataContainer();
+         pdc.set(this.npcIdKey, PersistentDataType.STRING, id);
+         if (def.glow) {
+            entity.setGlowing(true);
+         }
+      });
+      this.activeNonPlayerEntities.put(id, display);
+      this.plugin.getLogger().info("[NPC] configureBlockNpc id='" + id + "' material=" + material.name()
+            + " at " + location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ());
+   }
+
+   private void removeBlockNpcDisplay(String id) {
+      Entity other = this.activeNonPlayerEntities.remove(id);
+      if (other != null && other.isValid() && !other.isDead()) {
+         other.remove();
       }
    }
 
@@ -1280,7 +1458,12 @@ public final class NpcLibrary implements Listener {
    private void cleanSpawnArea(Location loc, double radius) {
       World world = loc.getWorld();
       if (world != null) {
+         NamespacedKey questNpcKey = new NamespacedKey(this.plugin, "quest_npc_id");
          for (Entity entity : world.getNearbyEntities(loc, radius, radius, radius)) {
+            // Dynamic quest NPCs use a different PDC key — never delete them as decoration orphans.
+            if (entity.getPersistentDataContainer().has(questNpcKey, PersistentDataType.STRING)) {
+               continue;
+            }
             String npcId = this.readNpcId(entity);
             if (npcId == null || npcId.isBlank()) {
                if (entity instanceof Interaction) {
@@ -1304,14 +1487,63 @@ public final class NpcLibrary implements Listener {
          if (last != null && now - last < 250L) {
             return true;
          }
+         NpcDefinition def = this.activeDefinitions.get(npcId);
+         if (def != null && def.navigator) {
+            this.toggleNpcNavigator(player, def, entity.getLocation());
+         }
          String actionType = this.readPdc(entity, this.actionTypeKey);
          String actionData = this.readPdc(entity, this.actionDataKey);
-         InteractionActionExecutor.execute(this.plugin, player, actionType, actionData);
+         InteractionActionExecutor.execute(this.plugin, player, actionType, actionData, entity.getLocation(), entity);
          NetworkSoundCue.NPC_INTERACT.play(player);
          return true;
       } else {
          return false;
       }
+   }
+
+   /** Public bridge to the shared NPC interaction vocabulary (used by quest NPCs and other services). */
+   public void executeInteractionAction(Player player, String actionType, String actionData, Location anchor) {
+      InteractionActionExecutor.execute(this.plugin, player, actionType, actionData, anchor, null);
+   }
+
+   public void executeInteractionAction(
+           Player player,
+           String actionType,
+           String actionData,
+           Location anchor,
+           Entity speaker
+   ) {
+      InteractionActionExecutor.execute(this.plugin, player, actionType, actionData, anchor, speaker);
+   }
+
+   /** Toggles a waypoint to this NPC when {@link NpcDefinition#navigator} is enabled. */
+   private void toggleNpcNavigator(Player player, NpcDefinition def, Location anchor) {
+      if (this.plugin.waypointNavigator() == null || player == null || def == null || anchor == null) {
+         return;
+      }
+      String waypointId = "npc:" + def.id;
+      if (this.plugin.waypointNavigator().isNavigating(player.getUniqueId(), waypointId)) {
+         this.plugin.waypointNavigator().clear(player, waypointId);
+         player.sendMessage(network.skypvp.shared.ServerTextUtil.miniMessageComponent(
+                 "<gray>Navigator cleared for <white>" + def.id + "</white>.</gray>"
+         ));
+         return;
+      }
+      String label = def.displayName == null || def.displayName.isBlank() ? def.id : def.displayName;
+      this.plugin.waypointNavigator().navigate(
+              player,
+              network.skypvp.paper.waypoint.Waypoint.of(
+                      waypointId,
+                      anchor,
+                      label,
+                      org.bukkit.Color.fromRGB(80, 200, 255),
+                      0.0D
+              ).withMarker(network.skypvp.paper.waypoint.WaypointMarker.octagon(
+                      org.bukkit.Color.fromRGB(80, 200, 255), "<white>◎</white>"))
+      );
+      player.sendMessage(network.skypvp.shared.ServerTextUtil.miniMessageComponent(
+              "<aqua>Navigator set:</aqua> <white>" + label + "</white>"
+      ));
    }
 
    private Entity spawnNpc(World world, NpcDefinition def, Location location) {
@@ -1345,6 +1577,9 @@ public final class NpcLibrary implements Listener {
    }
 
    private float interactionWidth(NpcDefinition def) {
+      if (isBlockNpcType(def.entityType)) {
+         return Math.max(0.6F, (float) (def.scale <= 0.0D ? 1.0D : def.scale));
+      }
       String type = def.entityType == null ? "VILLAGER" : def.entityType.toUpperCase(Locale.ROOT);
       return switch (type) {
          case "CHICKEN", "BEE", "PARROT", "BAT" -> 0.6F;
@@ -1354,6 +1589,9 @@ public final class NpcLibrary implements Listener {
    }
 
    private float interactionHeight(NpcDefinition def) {
+      if (isBlockNpcType(def.entityType)) {
+         return Math.max(0.7F, (float) (def.scale <= 0.0D ? 1.0D : def.scale) * 0.9F);
+      }
       String type = def.entityType == null ? "VILLAGER" : def.entityType.toUpperCase(Locale.ROOT);
       return switch (type) {
          case "CHICKEN", "BEE", "PARROT", "BAT" -> 1.0F;
@@ -1521,6 +1759,22 @@ public final class NpcLibrary implements Listener {
       return definition == null ? fallbackWorld.getSpawnLocation() : this.toLocation(fallbackWorld, definition.location);
    }
 
+   /** World anchor of an active NPC by id (e.g. {@code hub_scrapper}) — for navigator/quest targets. */
+   public Optional<Location> findNpcAnchor(String id) {
+      if (id == null || id.isBlank()) {
+         return Optional.empty();
+      }
+      NpcDefinition def = this.activeDefinitions.get(id.toLowerCase(Locale.ROOT));
+      if (def == null || def.location == null || def.location.world == null) {
+         return Optional.empty();
+      }
+      World world = this.plugin.getServer().getWorld(def.location.world);
+      if (world == null) {
+         return Optional.empty();
+      }
+      return Optional.ofNullable(this.resolveLocation(world, def));
+   }
+
    /**
     * Folia-safe reconcile for {@code /npc} command handlers. Entity spawn/teleport/remove must run on the
     * region that owns {@code anchor} (mirrors {@link network.skypvp.paper.PaperCorePlugin#reloadNpcDecorations});
@@ -1578,7 +1832,7 @@ public final class NpcLibrary implements Listener {
             interaction.remove();
          }
          this.activeEntities.remove(id);
-         PacketFakePlayer fakePlayer = this.fakePlayers.remove(id);
+         FakePlayerNpc fakePlayer = this.fakePlayers.remove(id);
          if (fakePlayer != null) {
             for (Player player : Bukkit.getOnlinePlayers()) {
                fakePlayer.destroy(player);

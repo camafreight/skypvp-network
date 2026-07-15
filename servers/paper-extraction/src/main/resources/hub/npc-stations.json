@@ -1,0 +1,52 @@
+{
+  "stations": [
+    {
+      "id": "hub_armory",
+      "displayName": "<gold><bold>Armory Quartermaster</bold></gold>",
+      "entityType": "VILLAGER",
+      "actionType": "PLAYER_COMMAND",
+      "actionData": "armory",
+      "hologramLines": ["<gold><bold>Armory</bold></gold>", "<gray>Craft · Salvage · Infuse", "<yellow>Click to open"]
+    },
+    {
+      "id": "hub_medic",
+      "displayName": "<green><bold>Field Medic</bold></green>",
+      "entityType": "VILLAGER",
+      "actionType": "PLAYER_COMMAND",
+      "actionData": "medic",
+      "hologramLines": ["<green><bold>Medic Bay</bold></green>", "<gray>Healing & stamina supplies", "<yellow>Click to open"]
+    },
+    {
+      "id": "hub_infuse",
+      "displayName": "<aqua><bold>Infuse Technician</bold></aqua>",
+      "entityType": "VILLAGER",
+      "actionType": "PLAYER_COMMAND",
+      "actionData": "infuse",
+      "hologramLines": ["<aqua><bold>Infuse & Overclock</bold></aqua>", "<gray>Socket modules & shields", "<yellow>Click to open"]
+    },
+    {
+      "id": "hub_breach",
+      "displayName": "<red><bold>Breach Officer</bold></red>",
+      "entityType": "VILLAGER",
+      "actionType": "PLAYER_COMMAND",
+      "actionData": "breach play",
+      "hologramLines": ["<red><bold>Aether Breach</bold></red>", "<gray>Deploy into a raid", "<yellow>Click to queue"]
+    },
+    {
+      "id": "hub_scrapper",
+      "displayName": "<gray><bold>Scrap Technician</bold></gray>",
+      "entityType": "VILLAGER",
+      "actionType": "QUEST_DIALOGUE",
+      "actionData": "scrapper_intro",
+      "hologramLines": ["<gray><bold>Scrapper Bay</bold></gray>", "<gray>Passive raid salvage · Upgrades", "<yellow>Click to talk"]
+    },
+    {
+      "id": "hub_pilot",
+      "displayName": "<aqua><bold>Stranded Pilot</bold></aqua>",
+      "entityType": "VILLAGER",
+      "actionType": "QUEST_DIALOGUE",
+      "actionData": "stranded_pilot",
+      "hologramLines": ["<aqua><bold>Stranded Pilot</bold></aqua>", "<gray>Flight recorder recovery", "<yellow>Click to talk"]
+    }
+  ]
+}

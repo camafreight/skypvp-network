@@ -1,5 +1,6 @@
 package network.skypvp.proxy.service;
 
+import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,6 +19,12 @@ import network.skypvp.proxy.repository.PartyRepository;
 import network.skypvp.proxy.repository.PlayerSocialSettingsRepository;
 
 public final class PartyService {
+   /**
+    * Hard cap on total party size (across the whole network). A party may be larger than a single breach deploy squad
+    * (the extraction backend caps how many actually deploy together, and the leader picks who). Enforced on invite,
+    * accept, and find/join.
+    */
+   private static final int MAX_PARTY_SIZE = 12;
    private final PartyRepository repository;
    private final PlayerSocialSettingsRepository socialSettingsRepository;
    private final Map<UUID, PartyService.PartyState> partiesById = new ConcurrentHashMap<>();
@@ -60,7 +67,7 @@ public final class PartyService {
          return PartyService.PartyActionResult.failed("You are already in a party.");
       } else {
          UUID partyId = UUID.randomUUID();
-         PartyService.PartyState state = new PartyService.PartyState(partyId, leaderId, true, new HashSet<>(Set.of(leaderId)));
+         PartyService.PartyState state = new PartyService.PartyState(partyId, leaderId, true, false, new HashSet<>(Set.of(leaderId)));
          this.partiesById.put(partyId, state);
          this.partyByMember.put(leaderId, partyId);
          this.persistParty(state);
@@ -85,8 +92,10 @@ public final class PartyService {
             return PartyService.PartyActionResult.failed("Party not found.");
          } else if (!this.memberCanInvite(party, inviterId)) {
             return PartyService.PartyActionResult.failed("You do not have permission to invite players.");
-         } else if (this.partyByMember.containsKey(targetId)) {
-            return PartyService.PartyActionResult.failed("That player is already in a party.");
+         } else if (partyId.equals(this.partyByMember.get(targetId))) {
+            return PartyService.PartyActionResult.failed("That player is already in your party.");
+         } else if (party.members().size() >= MAX_PARTY_SIZE) {
+            return PartyService.PartyActionResult.failed("Your party is full (max " + MAX_PARTY_SIZE + ").");
          }
          if (this.socialSettingsRepository != null) {
             this.socialSettingsRepository.refresh(targetId);
@@ -139,39 +148,70 @@ public final class PartyService {
    public synchronized PartyService.PartyActionResult accept(UUID targetId, UUID inviterId) {
       if (targetId == null) {
          return PartyService.PartyActionResult.invalid("Invalid player.");
-      } else if (this.partyByMember.containsKey(targetId)) {
-         return PartyService.PartyActionResult.failed("You are already in a party.");
-      } else {
-         PartyService.InviteState invite = null;
-         Map<UUID, PartyService.InviteState> incoming = this.invitesByTarget.get(targetId);
-         if (incoming != null && !incoming.isEmpty()) {
-            this.pruneExpired(targetId, incoming);
-            if (inviterId != null) {
-               invite = incoming.get(inviterId);
-            } else {
-               invite = incoming.values().stream().max(Comparator.comparing(PartyService.InviteState::expiresAt)).orElse(null);
-            }
-         }
+      }
 
-         if (invite != null && !invite.expiresAt().isBefore(Instant.now())) {
-            PartyService.PartyState party = this.partiesById.get(invite.partyId());
-            if (party == null) {
-               return PartyService.PartyActionResult.failed("That party is no longer available.");
-            } else {
-               party.members().add(targetId);
-               this.partyByMember.put(targetId, party.partyId());
-               if (incoming != null) {
-                  incoming.clear();
-               }
-
-               this.persistParty(party);
-               this.clearInvitesForTarget(targetId);
-               return PartyService.PartyActionResult.success("Joined party.", party.copy());
-            }
+      PartyService.InviteState invite = null;
+      Map<UUID, PartyService.InviteState> incoming = this.invitesByTarget.get(targetId);
+      if (incoming != null && !incoming.isEmpty()) {
+         this.pruneExpired(targetId, incoming);
+         if (inviterId != null) {
+            invite = incoming.get(inviterId);
          } else {
-            return PartyService.PartyActionResult.failed("No valid party invite found.");
+            invite = incoming.values().stream().max(Comparator.comparing(PartyService.InviteState::expiresAt)).orElse(null);
          }
       }
+
+      if (invite == null || invite.expiresAt().isBefore(Instant.now())) {
+         return PartyService.PartyActionResult.failed("No valid party invite found.");
+      }
+
+      PartyService.PartyState party = this.partiesById.get(invite.partyId());
+      if (party == null) {
+         return PartyService.PartyActionResult.failed("That party is no longer available.");
+      }
+
+      UUID currentPartyId = this.partyByMember.get(targetId);
+      if (party.partyId().equals(currentPartyId)) {
+         if (incoming != null) {
+            incoming.clear();
+         }
+         this.clearInvitesForTarget(targetId);
+         return PartyService.PartyActionResult.success("You are already in that party.", party.copy());
+      }
+
+      // Capacity must be checked before leaving the current party so a failed join does not eject the player.
+      if (party.members().size() >= MAX_PARTY_SIZE) {
+         return PartyService.PartyActionResult.failed("That party is full (max " + MAX_PARTY_SIZE + ").");
+      }
+
+      boolean switchedParties = false;
+      if (currentPartyId != null) {
+         PartyService.PartyActionResult left = this.leave(targetId);
+         if (!left.success()) {
+            return PartyService.PartyActionResult.failed("Could not leave your current party.");
+         }
+         switchedParties = true;
+         party = this.partiesById.get(invite.partyId());
+         if (party == null) {
+            return PartyService.PartyActionResult.failed("That party is no longer available.");
+         }
+         if (party.members().size() >= MAX_PARTY_SIZE) {
+            return PartyService.PartyActionResult.failed("That party is full (max " + MAX_PARTY_SIZE + ").");
+         }
+      }
+
+      party.members().add(targetId);
+      this.partyByMember.put(targetId, party.partyId());
+      if (incoming != null) {
+         incoming.clear();
+      }
+
+      this.persistParty(party);
+      this.clearInvitesForTarget(targetId);
+      return PartyService.PartyActionResult.success(
+            switchedParties ? "Left your previous party and joined the new one." : "Joined party.",
+            party.copy()
+      );
    }
 
    public synchronized PartyService.PartyActionResult leave(UUID memberId) {
@@ -190,9 +230,12 @@ public final class PartyService {
                return PartyService.PartyActionResult.success("Party disbanded.", null);
             } else {
                if (party.leaderId().equals(memberId)) {
-                  UUID nextLeader = party.members().stream().sorted().findFirst().orElse(null);
+                  UUID nextLeader = this.chooseSuccessor(party, party.members());
                   if (nextLeader != null) {
                      party.setLeaderId(nextLeader);
+                     if (this.repository != null) {
+                        this.repository.setMemberRole(party.partyId(), nextLeader, "LEADER");
+                     }
                   }
                }
 
@@ -201,6 +244,130 @@ public final class PartyService {
             }
          }
       }
+   }
+
+   /**
+    * Handles a member disconnect WITHOUT ejecting them from the party. A raider who crashes mid-raid (common in an
+    * extraction game mode) stays a member so that on reconnect they are still grouped and covered by friendly-fire
+    * protection. Rules:
+    * <ul>
+    *   <li>If no other member is online, the party is disbanded so fully-offline parties do not linger in the DB.</li>
+    *   <li>If the leader disconnects while other members are online, leadership hands off to the best-ranked online
+    *       member (so the party is not stuck with an offline leader), but the old leader is kept as a member.</li>
+    * </ul>
+    */
+   public synchronized PartyService.PartyDisconnectResult handleDisconnect(ProxyServer proxyServer, UUID memberId) {
+      if (memberId == null) {
+         return PartyService.PartyDisconnectResult.none();
+      }
+      UUID partyId = this.partyByMember.get(memberId);
+      if (partyId == null) {
+         return PartyService.PartyDisconnectResult.none();
+      }
+      PartyService.PartyState party = this.partiesById.get(partyId);
+      if (party == null) {
+         this.partyByMember.remove(memberId);
+         return PartyService.PartyDisconnectResult.none();
+      }
+
+      List<UUID> otherOnline = new ArrayList<>();
+      for (UUID member : party.members()) {
+         if (!member.equals(memberId) && proxyServer != null && proxyServer.getPlayer(member).isPresent()) {
+            otherOnline.add(member);
+         }
+      }
+
+      if (otherOnline.isEmpty()) {
+         for (UUID member : party.members()) {
+            this.partyByMember.remove(member);
+         }
+         this.partiesById.remove(partyId);
+         this.deleteParty(partyId);
+         return PartyService.PartyDisconnectResult.disbanded();
+      }
+
+      boolean wasLeader = party.leaderId().equals(memberId);
+      UUID newLeaderId = null;
+      if (wasLeader) {
+         newLeaderId = this.chooseSuccessor(party, otherOnline);
+         if (newLeaderId != null) {
+            party.setLeaderId(newLeaderId);
+            if (this.repository != null) {
+               this.repository.setMemberRole(party.partyId(), memberId, "CO_LEADER");
+               this.repository.setMemberRole(party.partyId(), newLeaderId, "LEADER");
+            }
+         }
+      }
+      this.persistParty(party);
+      return PartyService.PartyDisconnectResult.kept(wasLeader, newLeaderId);
+   }
+
+   /**
+    * Resolves a kick target by username, including offline party members (via {@code network_players.last_username}).
+    */
+   public synchronized Optional<UUID> resolveKickTarget(UUID leaderId, String targetName, ProxyServer proxyServer) {
+      if (leaderId == null || targetName == null || targetName.isBlank()) {
+         return Optional.empty();
+      }
+      UUID partyId = this.partyByMember.get(leaderId);
+      if (partyId == null) {
+         return Optional.empty();
+      }
+      PartyService.PartyState party = this.partiesById.get(partyId);
+      if (party == null || !party.leaderId().equals(leaderId)) {
+         return Optional.empty();
+      }
+      String normalized = targetName.trim();
+      if (proxyServer != null) {
+         Optional<Player> onlineExact = proxyServer.getPlayer(normalized);
+         if (onlineExact.isPresent() && party.members().contains(onlineExact.get().getUniqueId())) {
+            return Optional.of(onlineExact.get().getUniqueId());
+         }
+         for (UUID memberId : party.members()) {
+            Optional<Player> onlineMember = proxyServer.getPlayer(memberId);
+            if (onlineMember.isPresent() && onlineMember.get().getUsername().equalsIgnoreCase(normalized)) {
+               return Optional.of(memberId);
+            }
+         }
+      }
+      if (this.repository != null) {
+         return this.repository.resolveMemberIdInParty(partyId, normalized);
+      }
+      return Optional.empty();
+   }
+
+   /** Member usernames for tab completion (online names override stored last_username). */
+   public synchronized List<String> kickTabNames(UUID leaderId, ProxyServer proxyServer) {
+      UUID partyId = this.partyByMember.get(leaderId);
+      if (partyId == null) {
+         return List.of();
+      }
+      PartyService.PartyState party = this.partiesById.get(partyId);
+      if (party == null || !party.leaderId().equals(leaderId)) {
+         return List.of();
+      }
+      Map<UUID, String> stored = this.repository != null
+         ? this.repository.memberUsernamesForParty(partyId)
+         : Map.of();
+      List<String> names = new ArrayList<>();
+      for (UUID memberId : party.members()) {
+         if (memberId.equals(leaderId)) {
+            continue;
+         }
+         if (proxyServer != null) {
+            Optional<Player> online = proxyServer.getPlayer(memberId);
+            if (online.isPresent()) {
+               names.add(online.get().getUsername());
+               continue;
+            }
+         }
+         String storedName = stored.get(memberId);
+         if (storedName != null && !storedName.isBlank()) {
+            names.add(storedName);
+         }
+      }
+      names.sort(String.CASE_INSENSITIVE_ORDER);
+      return names;
    }
 
    public synchronized PartyService.PartyActionResult kick(UUID leaderId, UUID targetId) {
@@ -245,8 +412,13 @@ public final class PartyService {
          } else if (!party.members().contains(targetId)) {
             return PartyService.PartyActionResult.failed("That player is not in your party.");
          } else {
+            UUID previousLeaderId = party.leaderId();
             party.setLeaderId(targetId);
             this.persistParty(party);
+            if (this.repository != null) {
+               this.repository.setMemberRole(party.partyId(), previousLeaderId, "CO_LEADER");
+               this.repository.setMemberRole(party.partyId(), targetId, "LEADER");
+            }
             return PartyService.PartyActionResult.success("Transferred party leadership.", party.copy());
          }
       }
@@ -295,6 +467,103 @@ public final class PartyService {
       }
    }
 
+   public synchronized PartyService.PartyActionResult setOpen(UUID leaderId, boolean open) {
+      UUID partyId = this.partyByMember.get(leaderId);
+      if (partyId == null) {
+         return PartyService.PartyActionResult.failed("You are not in a party.");
+      } else {
+         PartyService.PartyState party = this.partiesById.get(partyId);
+         if (party != null && party.leaderId().equals(leaderId)) {
+            party.setOpen(open);
+            this.persistParty(party);
+            return PartyService.PartyActionResult.success(
+               open
+                  ? "Your party is now open — anyone can use /party find to join."
+                  : "Your party is now closed to /party find.",
+               party.copy()
+            );
+         } else {
+            return PartyService.PartyActionResult.failed("Only the leader can open or close the party.");
+         }
+      }
+   }
+
+   /**
+    * Finds an open party for a player looking to join one and adds them to it. To encourage groups filling up, the
+    * open party with the most online members that still has room is chosen. Fully-offline parties are skipped so a
+    * seeker is never dropped into an empty group.
+    *
+    * @return the joined party in the result on success, or a failure describing why no party was joined
+    */
+   public synchronized PartyService.PartyActionResult findOpenParty(ProxyServer proxyServer, UUID seekerId) {
+      if (seekerId == null) {
+         return PartyService.PartyActionResult.invalid("Invalid player.");
+      }
+      if (this.partyByMember.containsKey(seekerId)) {
+         return PartyService.PartyActionResult.failed("You are already in a party. Leave it first with /party leave.");
+      }
+
+      PartyService.PartyState best = null;
+      int bestOnline = 0;
+      for (PartyService.PartyState party : this.partiesById.values()) {
+         if (!party.open() || party.members().size() >= MAX_PARTY_SIZE) {
+            continue;
+         }
+         int online = 0;
+         for (UUID member : party.members()) {
+            if (proxyServer != null && proxyServer.getPlayer(member).isPresent()) {
+               online++;
+            }
+         }
+         if (online > bestOnline) {
+            bestOnline = online;
+            best = party;
+         }
+      }
+
+      if (best == null) {
+         return PartyService.PartyActionResult.failed("No open parties are looking for members right now.");
+      }
+
+      best.members().add(seekerId);
+      this.partyByMember.put(seekerId, best.partyId());
+      this.invitesByTarget.remove(seekerId);
+      this.clearInvitesForTarget(seekerId);
+      this.persistParty(best);
+      return PartyService.PartyActionResult.success("Joined an open party!", best.copy());
+   }
+
+   /**
+    * Joins a specific open party by id (used by the "find a party" browser where a seeker picks a party to join). The
+    * party must be flagged open and still have room; otherwise the seeker is told to try another.
+    *
+    * @return the joined party in the result on success, or a failure describing why the join was rejected
+    */
+   public synchronized PartyService.PartyActionResult joinOpenParty(UUID seekerId, UUID partyId) {
+      if (seekerId == null || partyId == null) {
+         return PartyService.PartyActionResult.invalid("Invalid request.");
+      }
+      if (this.partyByMember.containsKey(seekerId)) {
+         return PartyService.PartyActionResult.failed("You are already in a party. Leave it first with /party leave.");
+      }
+      PartyService.PartyState party = this.partiesById.get(partyId);
+      if (party == null) {
+         return PartyService.PartyActionResult.failed("That party no longer exists.");
+      }
+      if (!party.open()) {
+         return PartyService.PartyActionResult.failed("That party is not open to join.");
+      }
+      if (party.members().size() >= MAX_PARTY_SIZE) {
+         return PartyService.PartyActionResult.failed("That party is full (max " + MAX_PARTY_SIZE + ").");
+      }
+      party.members().add(seekerId);
+      this.partyByMember.put(seekerId, partyId);
+      this.invitesByTarget.remove(seekerId);
+      this.clearInvitesForTarget(seekerId);
+      this.persistParty(party);
+      return PartyService.PartyActionResult.success("Joined the party!", party.copy());
+   }
+
    public synchronized List<UUID> onlineMembers(ProxyServer proxyServer, UUID partyId) {
       PartyService.PartyState party = this.partiesById.get(partyId);
       if (party == null) {
@@ -328,6 +597,32 @@ public final class PartyService {
       }
 
       return total;
+   }
+
+   /**
+    * Picks the best-ranked leadership successor from {@code candidates} (CO_LEADER &gt; TRUSTED &gt; MEMBER, ties
+    * broken by lowest UUID for determinism). Reads roles from the DB since the proxy does not cache them.
+    */
+   private UUID chooseSuccessor(PartyService.PartyState party, java.util.Collection<UUID> candidates) {
+      if (candidates == null || candidates.isEmpty()) {
+         return null;
+      }
+      Map<UUID, String> roles = this.repository == null ? Map.of() : this.repository.memberRoles(party.partyId());
+      return candidates.stream()
+         .min(Comparator.<UUID>comparingInt(id -> roleRank(roles.get(id))).thenComparing(Comparator.naturalOrder()))
+         .orElse(null);
+   }
+
+   private static int roleRank(String raw) {
+      if (raw == null) {
+         return 3;
+      }
+      return switch (raw.trim().toUpperCase(Locale.ROOT)) {
+         case "LEADER" -> 0;
+         case "CO_LEADER", "CO-LEADER", "COLEADER" -> 1;
+         case "TRUSTED" -> 2;
+         default -> 3;
+      };
    }
 
    private boolean memberCanInvite(PartyService.PartyState party, UUID memberId) {
@@ -369,6 +664,23 @@ public final class PartyService {
       });
    }
 
+   /** Drops expired invites and removes empty target buckets so {@link #invitesByTarget} cannot grow without bound. */
+   public synchronized void sweepStaleInvites() {
+      for (java.util.Iterator<Map.Entry<UUID, Map<UUID, PartyService.InviteState>>> iterator = this.invitesByTarget.entrySet().iterator();
+           iterator.hasNext();) {
+         Map.Entry<UUID, Map<UUID, PartyService.InviteState>> entry = iterator.next();
+         Map<UUID, PartyService.InviteState> incoming = entry.getValue();
+         if (incoming == null || incoming.isEmpty()) {
+            iterator.remove();
+            continue;
+         }
+         this.pruneExpired(entry.getKey(), incoming);
+         if (incoming.isEmpty()) {
+            iterator.remove();
+         }
+      }
+   }
+
    private void hydrateFromRepository() {
       if (this.repository != null) {
          Map<UUID, PartyRepository.PartySnapshot> persisted = this.repository.loadParties();
@@ -378,7 +690,7 @@ public final class PartyService {
                members.add(snapshot.leaderId());
             }
 
-            PartyService.PartyState state = new PartyService.PartyState(snapshot.partyId(), snapshot.leaderId(), snapshot.followLeader(), members);
+            PartyService.PartyState state = new PartyService.PartyState(snapshot.partyId(), snapshot.leaderId(), snapshot.followLeader(), snapshot.open(), members);
             this.partiesById.put(snapshot.partyId(), state);
             members.forEach(member -> this.partyByMember.put(member, snapshot.partyId()));
          });
@@ -394,7 +706,7 @@ public final class PartyService {
 
    private void persistParty(PartyService.PartyState state) {
       if (this.repository != null && state != null) {
-         this.repository.upsertParty(state.partyId(), state.leaderId(), state.followLeader());
+         this.repository.upsertParty(state.partyId(), state.leaderId(), state.followLeader(), state.open());
          this.repository.replaceMembers(state.partyId(), state.members());
       }
    }
@@ -420,6 +732,26 @@ public final class PartyService {
    public static record InviteState(UUID partyId, UUID inviterId, Instant expiresAt) {
    }
 
+   public static record PartyDisconnectResult(PartyService.PartyDisconnectResult.Outcome outcome, boolean wasLeader, UUID newLeaderId) {
+      public enum Outcome {
+         NONE,
+         KEPT,
+         DISBANDED
+      }
+
+      static PartyService.PartyDisconnectResult none() {
+         return new PartyService.PartyDisconnectResult(Outcome.NONE, false, null);
+      }
+
+      static PartyService.PartyDisconnectResult disbanded() {
+         return new PartyService.PartyDisconnectResult(Outcome.DISBANDED, false, null);
+      }
+
+      static PartyService.PartyDisconnectResult kept(boolean wasLeader, UUID newLeaderId) {
+         return new PartyService.PartyDisconnectResult(Outcome.KEPT, wasLeader, newLeaderId);
+      }
+   }
+
    public static record PartyActionResult(boolean success, String message, PartyService.PartyState party) {
       static PartyService.PartyActionResult success(String message, PartyService.PartyState party) {
          return new PartyService.PartyActionResult(true, message, party);
@@ -438,12 +770,14 @@ public final class PartyService {
       private final UUID partyId;
       private UUID leaderId;
       private boolean followLeader;
+      private boolean open;
       private final Set<UUID> members;
 
-      private PartyState(UUID partyId, UUID leaderId, boolean followLeader, Set<UUID> members) {
+      private PartyState(UUID partyId, UUID leaderId, boolean followLeader, boolean open, Set<UUID> members) {
          this.partyId = partyId;
          this.leaderId = leaderId;
          this.followLeader = followLeader;
+         this.open = open;
          this.members = members;
       }
 
@@ -459,6 +793,10 @@ public final class PartyService {
          return this.followLeader;
       }
 
+      public boolean open() {
+         return this.open;
+      }
+
       public Set<UUID> members() {
          return this.members;
       }
@@ -471,8 +809,12 @@ public final class PartyService {
          this.followLeader = followLeader;
       }
 
+      private void setOpen(boolean open) {
+         this.open = open;
+      }
+
       private PartyService.PartyState copy() {
-         return new PartyService.PartyState(this.partyId, this.leaderId, this.followLeader, new HashSet<>(this.members));
+         return new PartyService.PartyState(this.partyId, this.leaderId, this.followLeader, this.open, new HashSet<>(this.members));
       }
    }
 }

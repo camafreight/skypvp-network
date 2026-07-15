@@ -104,4 +104,15 @@ public final class GuiLayoutLibrary {
       private QuickSelect9() {
       }
    }
+
+   /** Wide lobby network navigator (6 rows). */
+   public static final class NetworkNavigator54 {
+      public static final int CLOSE_SLOT = 0;
+      public static final int BACK_SLOT = 8;
+      public static final int LOBBY_SLOT = 13;
+      public static final int EXTRACTION_SLOT = 31;
+
+      private NetworkNavigator54() {
+      }
+   }
 }

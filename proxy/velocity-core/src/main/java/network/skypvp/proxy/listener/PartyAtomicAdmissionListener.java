@@ -39,8 +39,7 @@ public final class PartyAtomicAdmissionListener {
                String targetServerId = event.getOriginalServer().getServerInfo().getName();
                List<UUID> onlineMembers = this.partyService.onlineMembers(this.proxyServer, party.partyId());
                if (onlineMembers.size() > 1) {
-                  int availableSlots = this.routingService.availableSlotsForServer(targetServerId);
-                  if (availableSlots < onlineMembers.size()) {
+                  if (!this.routingService.canAdmitPartyToServer(targetServerId, onlineMembers.size())) {
                      PartyQueueService.QueueGroupResult grouped = this.partyQueueService
                         .enqueue(this.routingService.queueKeyForServer(targetServerId), party.partyId(), party.leaderId(), onlineMembers);
                      if (grouped.valid()) {

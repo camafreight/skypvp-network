@@ -41,7 +41,9 @@ chunk-loading-advanced:
 chunk-loading-basic:
   player-max-chunk-generate-rate: -1.0
   player-max-chunk-load-rate: 100.0
-  player-max-chunk-send-rate: 75.0
+  # Slightly higher send rate reduces queue-induced F3+3 ping spikes when crossing chunk strips
+  # on the hub (oscillation still costs bandwidth; pair with view-distance=6).
+  player-max-chunk-send-rate: 100.0
 chunk-system:
   io-threads: -1
   worker-threads: -1

@@ -1,0 +1,1 @@
+{"typeId":"extraction:medic_sterile_bandage","displayName":"Sterile Bandage","coinCost":50,"stats":{"stackSize":8,"healAmount":16.0,"healChunkAmount":4.0,"healChunkIntervalTicks":8,"consumeSeconds":1.6,"useCooldownMillis":4000}}

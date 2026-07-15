@@ -4,36 +4,32 @@ import java.util.Optional;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.service.WorldStateService;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 
 /**
  * Resolves extraction-lobby return locations for breach players.
- * Uses the saved back location from join when it is safe; otherwise falls back to
- * {@code world-templates/<presetId>/meta.json} via {@link WorldStateService#presetSpawnLocation()}.
+ *
+ * <p>Hub returns always use {@code world-templates/<presetId>/meta.json} via
+ * {@link WorldStateService#presetSpawnLocation()}. Players joining the pod spawn at that point
+ * unless they are reconnecting into an active raid (handled separately by
+ * {@link BreachEngine#resumeDisconnectedRaider}).
  */
 public final class BreachHubLocations {
 
     private BreachHubLocations() {
     }
 
-    /** Records where the player stood in the hub when they queued for breach. */
+    /**
+     * @deprecated Hub returns always use the preset spawn; kept so call sites that still record a
+     *     back-location compile without behavior change.
+     */
+    @Deprecated
     public static Location capture(PaperCorePlugin core, Player player) {
-        if (player == null) {
-            return requirePresetSpawn(core);
-        }
-        Location current = player.getLocation();
-        if (isSafeHubReturn(core, current)) {
-            return current.clone();
-        }
         return requirePresetSpawn(core);
     }
 
-    /** Returns stored back location, or preset spawn from meta.json when stored is unsafe. */
+    /** Always returns the configured hub spawn from meta.json. */
     public static Location resolve(PaperCorePlugin core, Optional<Location> stored) {
-        if (stored.isPresent() && isSafeHubReturn(core, stored.get())) {
-            return stored.get().clone();
-        }
         return requirePresetSpawn(core);
     }
 
@@ -42,41 +38,8 @@ public final class BreachHubLocations {
             return;
         }
         Location target = resolve(core, stored);
-        // teleportAsync loads the destination chunk itself and is mandatory on Folia (region threading);
-        // the previous blocking getChunkAt(...).load(true) + teleport(...) throws UnsupportedOperationException.
+        // teleportAsync loads the destination chunk itself and is mandatory on Folia (region threading).
         player.teleportAsync(target);
-    }
-
-    private static boolean isSafeHubReturn(PaperCorePlugin core, Location location) {
-        if (location == null || location.getWorld() == null || core == null) {
-            return false;
-        }
-        if (!isManagedHubWorld(core, location.getWorld())) {
-            return false;
-        }
-
-        World world = location.getWorld();
-        int y = location.getBlockY();
-        // IMPORTANT (Folia): this is called from the *breach* region thread when teleporting a player back to
-        // the *hub* world. We must NOT touch the hub world's chunks/blocks here (getChunkAt/load/getBlockAt) —
-        // accessing another region's chunk off-thread throws and previously aborted the whole hub teleport,
-        // stranding players in the breach. teleportAsync(target) loads the destination chunk itself, so a cheap
-        // managed-world + height-bounds validation is sufficient; anything unsafe falls back to the preset spawn.
-        return y >= world.getMinHeight() + 1 && y <= world.getMaxHeight() - 1;
-    }
-
-    private static boolean isManagedHubWorld(PaperCorePlugin core, World world) {
-        if (world == null) {
-            return false;
-        }
-        if (world.getName().startsWith("breach_")) {
-            return false;
-        }
-        WorldStateService worldState = core.worldStateService();
-        if (worldState != null && worldState.managedWorlds().contains(world.getName())) {
-            return true;
-        }
-        return "world".equalsIgnoreCase(world.getName());
     }
 
     private static Location requirePresetSpawn(PaperCorePlugin core) {

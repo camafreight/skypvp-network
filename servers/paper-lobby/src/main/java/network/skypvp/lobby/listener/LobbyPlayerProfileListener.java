@@ -38,8 +38,13 @@ public final class LobbyPlayerProfileListener implements Listener {
          p.setGameMode(GameMode.ADVENTURE);
          p.getInventory().clear();
          p.getInventory().setArmorContents(null);
-         p.setExp(0.0F);
-         p.setLevel(0);
+         // The XP bar belongs to the network level system — render the custom level instead of zeroing it.
+         if (this.plugin.playerLevelService() != null) {
+            this.plugin.playerLevelService().applyBar(p);
+         } else {
+            p.setExp(0.0F);
+            p.setLevel(0);
+         }
          p.setFireTicks(0);
          p.setFallDistance(0.0F);
          AttributeInstance maxHealthAttr = p.getAttribute(Attribute.MAX_HEALTH);

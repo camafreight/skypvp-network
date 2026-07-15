@@ -25,6 +25,8 @@ public record BreachMapMeta(
         List<ExtractZone> extractZones,
         List<LootChest> lootChests,
         List<BossSpawn> bossSpawns,
+        List<MobSpawn> mobSpawns,
+        List<MaterialNode> materialNodes,
         List<WorldGuardRegion> worldGuardRegions,
         List<PointOfInterest> pointsOfInterest
 ) {
@@ -38,6 +40,8 @@ public record BreachMapMeta(
         extractZones = List.copyOf(extractZones == null ? List.of() : extractZones);
         lootChests = List.copyOf(lootChests == null ? List.of() : lootChests);
         bossSpawns = List.copyOf(bossSpawns == null ? List.of() : bossSpawns);
+        mobSpawns = List.copyOf(mobSpawns == null ? List.of() : mobSpawns);
+        materialNodes = List.copyOf(materialNodes == null ? List.of() : materialNodes);
         worldGuardRegions = List.copyOf(worldGuardRegions == null ? List.of() : worldGuardRegions);
         pointsOfInterest = List.copyOf(pointsOfInterest == null ? List.of() : pointsOfInterest);
     }
@@ -63,6 +67,8 @@ public record BreachMapMeta(
                 parseExtractZones(root.getAsJsonArray("extractZones")),
                 parseLootChests(root.getAsJsonArray("lootChests")),
                 parseBossSpawns(root.getAsJsonArray("bossSpawns")),
+                parseMobSpawns(root.getAsJsonArray("mobSpawns")),
+                parseMaterialNodes(root.getAsJsonArray("materialNodes")),
                 parseWorldGuardRegions(root.getAsJsonArray("worldGuardRegions")),
                 parsePointsOfInterest(root.getAsJsonArray("pointsOfInterest"))
         );
@@ -82,6 +88,20 @@ public record BreachMapMeta(
     public record ExtractZone(String id, double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
         public ExtractZone {
             id = normalize(id, "extract");
+            // Authors sometimes swap min/max; empty AABBs silently break extract detection
+            // while beacon visuals still appear at the mathematical center.
+            double x0 = Math.min(minX, maxX);
+            double x1 = Math.max(minX, maxX);
+            double y0 = Math.min(minY, maxY);
+            double y1 = Math.max(minY, maxY);
+            double z0 = Math.min(minZ, maxZ);
+            double z1 = Math.max(minZ, maxZ);
+            minX = x0;
+            maxX = x1;
+            minY = y0;
+            maxY = y1;
+            minZ = z0;
+            maxZ = z1;
         }
 
         public boolean contains(double x, double y, double z) {
@@ -122,6 +142,50 @@ public record BreachMapMeta(
             mythicMobId = normalize(mythicMobId, "");
             delaySeconds = Math.max(0, delaySeconds);
             level = Math.max(1.0, level);
+        }
+    }
+
+    /** Recurring MythicMob pressure points (gunners, patrols). */
+    public record MobSpawn(
+            String id,
+            String mythicMobId,
+            double x,
+            double y,
+            double z,
+            int delaySeconds,
+            int intervalSeconds,
+            int maxAlive,
+            double level,
+            String cohortId
+    ) {
+        public MobSpawn {
+            id = normalize(id, "mob");
+            mythicMobId = normalize(mythicMobId, "");
+            delaySeconds = Math.max(0, delaySeconds);
+            intervalSeconds = Math.max(30, intervalSeconds);
+            maxAlive = Math.max(1, maxAlive);
+            level = Math.max(1.0, level);
+            cohortId = cohortId == null || cohortId.isBlank() ? id : cohortId.trim();
+        }
+    }
+
+    /** Passive salvage piles raiders can gather while a breach is active. */
+    public record MaterialNode(
+            String id,
+            double x,
+            double y,
+            double z,
+            String materialId,
+            int amount,
+            int respawnSeconds,
+            double gatherRadius
+    ) {
+        public MaterialNode {
+            id = normalize(id, "node");
+            materialId = normalize(materialId, "cloth_scrap");
+            amount = Math.max(1, amount);
+            respawnSeconds = Math.max(15, respawnSeconds);
+            gatherRadius = gatherRadius <= 0.0 ? 2.5 : gatherRadius;
         }
     }
 
@@ -182,6 +246,18 @@ public record BreachMapMeta(
             minZ = Math.min(minZ, boss.z());
             maxX = Math.max(maxX, boss.x());
             maxZ = Math.max(maxZ, boss.z());
+        }
+        for (MobSpawn mob : mobSpawns) {
+            minX = Math.min(minX, mob.x());
+            minZ = Math.min(minZ, mob.z());
+            maxX = Math.max(maxX, mob.x());
+            maxZ = Math.max(maxZ, mob.z());
+        }
+        for (MaterialNode node : materialNodes) {
+            minX = Math.min(minX, node.x());
+            minZ = Math.min(minZ, node.z());
+            maxX = Math.max(maxX, node.x());
+            maxZ = Math.max(maxZ, node.z());
         }
         for (PointOfInterest poi : pointsOfInterest) {
             minX = Math.min(minX, poi.x());
@@ -296,6 +372,56 @@ public record BreachMapMeta(
             ));
         }
         return Collections.unmodifiableList(spawns);
+    }
+
+    private static List<MobSpawn> parseMobSpawns(JsonArray array) {
+        if (array == null) {
+            return List.of();
+        }
+        List<MobSpawn> spawns = new ArrayList<>();
+        for (JsonElement element : array) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject obj = element.getAsJsonObject();
+            spawns.add(new MobSpawn(
+                    textOrDefault(obj, "id", "mob-" + spawns.size()),
+                    textOrDefault(obj, "mythicMobId", ""),
+                    doubleOrDefault(obj, "x", 0.5),
+                    doubleOrDefault(obj, "y", 64.0),
+                    doubleOrDefault(obj, "z", 0.5),
+                    intOrDefault(obj, "delaySeconds", 60),
+                    intOrDefault(obj, "intervalSeconds", 180),
+                    intOrDefault(obj, "maxAlive", 1),
+                    doubleOrDefault(obj, "level", 1.0),
+                    textOrDefault(obj, "cohortId", textOrDefault(obj, "id", "mob-" + spawns.size()))
+            ));
+        }
+        return Collections.unmodifiableList(spawns);
+    }
+
+    private static List<MaterialNode> parseMaterialNodes(JsonArray array) {
+        if (array == null) {
+            return List.of();
+        }
+        List<MaterialNode> nodes = new ArrayList<>();
+        for (JsonElement element : array) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject obj = element.getAsJsonObject();
+            nodes.add(new MaterialNode(
+                    textOrDefault(obj, "id", "node-" + nodes.size()),
+                    doubleOrDefault(obj, "x", 0.5),
+                    doubleOrDefault(obj, "y", 64.0),
+                    doubleOrDefault(obj, "z", 0.5),
+                    textOrDefault(obj, "materialId", "cloth_scrap"),
+                    intOrDefault(obj, "amount", 1),
+                    intOrDefault(obj, "respawnSeconds", 45),
+                    doubleOrDefault(obj, "gatherRadius", 2.5)
+            ));
+        }
+        return Collections.unmodifiableList(nodes);
     }
 
     private static List<WorldGuardRegion> parseWorldGuardRegions(JsonArray array) {

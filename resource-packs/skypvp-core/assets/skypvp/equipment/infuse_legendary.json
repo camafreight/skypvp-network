@@ -1,0 +1,13 @@
+{
+  "layers": {
+    "humanoid": [
+      { "texture": "skypvp:infuse_legendary" }
+    ],
+    "humanoid_leggings": [
+      { "texture": "skypvp:infuse_legendary" }
+    ],
+    "wings": [
+      { "texture": "skypvp:infuse_legendary" }
+    ]
+  }
+}

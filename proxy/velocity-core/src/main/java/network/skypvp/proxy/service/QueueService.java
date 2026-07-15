@@ -20,6 +20,7 @@ import redis.clients.jedis.JedisPooled;
 
 public final class QueueService implements AutoCloseable {
    private static final String KEY_ACTIVE = "skypvp:queue:active";
+   private static final long SWAP_CONFIRM_WINDOW_MILLIS = 10000L;
    private static final String KEY_PLAYERS = "skypvp:queue:players";
    private static final String KEY_PREFIX = "skypvp:queue:data:";
    private final JedisPooled jedis;
@@ -51,7 +52,16 @@ public final class QueueService implements AutoCloseable {
    }
 
    public synchronized QueueService.QueueLeaveResult leaveQueue(UUID playerId) {
+      if (playerId != null) {
+         this.swapConfirmations.remove(playerId);
+      }
       return this.useRedis ? this.redisLeave(playerId) : this.memLeave(playerId);
+   }
+
+   /** Drops swap-confirmation prompts past their 10s confirm window (players who never confirmed). */
+   public void sweepExpiredSwapConfirmations() {
+      long cutoff = System.currentTimeMillis() - SWAP_CONFIRM_WINDOW_MILLIS;
+      this.swapConfirmations.values().removeIf(pending -> pending.timestamp() < cutoff);
    }
 
    public synchronized Optional<QueueStatusSnapshot> status(UUID playerId, String bestTargetServerId) {
@@ -203,7 +213,9 @@ public final class QueueService implements AutoCloseable {
          }
 
          QueueService.PendingSwap pending = this.swapConfirmations.get(playerId);
-         if (pending == null || !pending.targetQueue().equalsIgnoreCase(queueKey) || System.currentTimeMillis() - pending.timestamp() >= 10000L) {
+         if (pending == null
+            || !pending.targetQueue().equalsIgnoreCase(queueKey)
+            || System.currentTimeMillis() - pending.timestamp() >= SWAP_CONFIRM_WINDOW_MILLIS) {
             this.swapConfirmations.put(playerId, new QueueService.PendingSwap(queueKey, System.currentTimeMillis()));
             return QueueService.QueueJoinResult.requiresSwapConfirmation(existing, queueKey);
          }
@@ -302,7 +314,9 @@ public final class QueueService implements AutoCloseable {
          }
 
          QueueService.PendingSwap pending = this.swapConfirmations.get(playerId);
-         if (pending == null || !pending.targetQueue().equalsIgnoreCase(queueKey) || System.currentTimeMillis() - pending.timestamp() >= 10000L) {
+         if (pending == null
+            || !pending.targetQueue().equalsIgnoreCase(queueKey)
+            || System.currentTimeMillis() - pending.timestamp() >= SWAP_CONFIRM_WINDOW_MILLIS) {
             this.swapConfirmations.put(playerId, new QueueService.PendingSwap(queueKey, System.currentTimeMillis()));
             return QueueService.QueueJoinResult.requiresSwapConfirmation(existing, queueKey);
          }

@@ -133,7 +133,12 @@ class ServerRoutingServiceTest {
                 loadRatio,
                 stale ? 60_000L : 1_000L,
                 overSoftCapacity,
-                ServerLifecycleState.READY
+                ServerLifecycleState.READY,
+                0,
+                0,
+                0,
+                0,
+                joinable ? 60_000L : 0L
         );
     }
 

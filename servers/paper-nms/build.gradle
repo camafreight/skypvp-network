@@ -1,0 +1,15 @@
+// Version-pinned NMS implementation module for the headless (connectionless) real-player system.
+//
+// This is the ONLY module that touches net.minecraft internals. It compiles against the Paper 1.21.11
+// dev bundle (Folia is a superset fork, so these classes exist on both the Paper lobby and Folia extraction
+// runtimes, which both run Mojang-mapped 1.20.5+). The produced artifact is Mojang-mapped (MOJANG_PRODUCTION)
+// and shaded into paper-core; paper-core's manifest carries paperweight-mappings-namespace=mojang so Paper
+// does not attempt to remap these references at load time.
+plugins {
+    id 'io.papermc.paperweight.userdev' version '2.0.0-beta.18'
+}
+
+dependencies {
+    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
+    compileOnly project(':servers:paper-nms-api')
+}

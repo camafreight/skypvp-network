@@ -49,10 +49,43 @@ public interface ServerPlatform {
 
    void runAtChunkLater(World world, int chunkX, int chunkZ, Runnable task, long delayTicks);
 
+   /**
+    * True when the calling thread owns {@code entity}'s region (always true on Paper).
+    * Use before mutating an entity from a region task that was scheduled by cached chunk.
+    */
+   default boolean isOwnedByCurrentRegion(Entity entity) {
+      return true;
+   }
+
+   default boolean isOwnedByCurrentRegion(Location location) {
+      return true;
+   }
+
+   /**
+    * Runs {@code task} immediately when this thread already owns the entity; otherwise schedules
+    * onto the entity's owning region. Prefer this for combat reactions that may fire on a
+    * foreign region thread (damage events, cross-region hitscan).
+    */
+   default void runOwned(Entity entity, Runnable task) {
+      if (entity != null && task != null) {
+         this.runAtEntity(entity, task);
+      }
+   }
+
    default void runAtEntity(Entity entity, Runnable task) {
       if (entity != null) {
          this.runAtLocation(entity.getLocation(), task);
       }
+   }
+
+   /**
+    * Repeating task pinned to an entity: runs on the entity's owning region thread, follows
+    * region hops, retires when the entity is removed. Prefer this over re-submitting
+    * {@link #runAtEntity} from a heartbeat — one registration replaces per-tick cross-thread
+    * queue traffic. {@code retired} fires once on entity removal (Folia only).
+    */
+   default PlatformTask runAtEntityTimer(Entity entity, Runnable task, Runnable retired, long delayTicks, long periodTicks) {
+      throw new UnsupportedOperationException("runAtEntityTimer not supported by this platform");
    }
 
    void runOnPlayer(Player player, Runnable task);

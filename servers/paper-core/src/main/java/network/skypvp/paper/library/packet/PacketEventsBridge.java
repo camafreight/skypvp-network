@@ -13,6 +13,11 @@ import org.bukkit.plugin.Plugin;
  */
 public final class PacketEventsBridge {
 
+    /** Missing-user warnings repeat per packet (sidebar refreshes 3x/s) — throttle to one per player per interval. */
+    private static final java.util.concurrent.ConcurrentHashMap<java.util.UUID, Long> MISSING_USER_WARNED_AT =
+        new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long MISSING_USER_WARN_INTERVAL_MS = 300_000L;
+
     private PacketEventsBridge() {
     }
 
@@ -35,7 +40,16 @@ public final class PacketEventsBridge {
         try {
             User user = PacketEvents.getAPI().getPlayerManager().getUser(player);
             if (user == null) {
-                logger.warning("PacketEvents user missing for " + player.getName() + " (" + context + ")");
+                long now = System.currentTimeMillis();
+                if (MISSING_USER_WARNED_AT.size() > 512) {
+                    MISSING_USER_WARNED_AT.clear();
+                }
+                Long warnedAt = MISSING_USER_WARNED_AT.get(player.getUniqueId());
+                if (warnedAt == null || now - warnedAt >= MISSING_USER_WARN_INTERVAL_MS) {
+                    MISSING_USER_WARNED_AT.put(player.getUniqueId(), now);
+                    logger.warning("PacketEvents user missing for " + player.getName()
+                        + " (" + context + "; suppressing repeats for 5m)");
+                }
                 return;
             }
             user.sendPacket(packet);

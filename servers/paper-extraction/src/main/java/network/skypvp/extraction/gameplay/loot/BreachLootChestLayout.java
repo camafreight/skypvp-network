@@ -107,7 +107,7 @@ public final class BreachLootChestLayout {
         }
     }
 
-    private static ItemStack controlButton(JavaPlugin plugin, Material material, String label, String action) {
+    static ItemStack controlButton(JavaPlugin plugin, Material material, String label, String action) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
@@ -122,7 +122,7 @@ public final class BreachLootChestLayout {
         return item;
     }
 
-    private static ItemStack fillerPane(JavaPlugin plugin) {
+    static ItemStack fillerPane(JavaPlugin plugin) {
         ItemStack item = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {

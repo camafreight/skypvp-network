@@ -37,6 +37,10 @@ public class ScoreboardProviderIT {
         Mockito.when(mockPlugin.hudProviderService()).thenReturn(mockHudProviderService);
         Mockito.when(mockPlugin.gameModeBehaviorService()).thenReturn(mockBehaviorService);
         Mockito.when(mockPlugin.performanceMonitorService()).thenReturn(mockPerf);
+        // Non-Folia platform so scoreboard paths run synchronously against the Bukkit API.
+        network.skypvp.paper.platform.ServerPlatform mockPlatform =
+                Mockito.mock(network.skypvp.paper.platform.ServerPlatform.class);
+        Mockito.when(mockPlugin.platform()).thenReturn(mockPlatform);
 
         Mockito.when(mockBehaviorService.booleanValue(Mockito.eq("core.hud.scoreboard.enabled"), Mockito.anyBoolean())).thenReturn(true);
 

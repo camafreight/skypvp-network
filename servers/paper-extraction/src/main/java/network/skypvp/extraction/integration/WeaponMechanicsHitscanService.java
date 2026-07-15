@@ -20,8 +20,9 @@ import org.bukkit.util.Vector;
  * Converts WeaponMechanics bullet weapons into single-tick ray hits while preserving WM damage,
  * spread, pierce, and dropoff via {@code WeaponProjectile.updatePosition()}.
  *
- * <p>Combat is queued onto worker threads that schedule region-owned ray resolution; tracers and
- * impact cosmetics use a separate deferred visual pipeline.
+ * <p>Combat resolves inline on the {@code WeaponShootEvent} region thread the same tick the shot fires so
+ * raycasts test against targets at their current position. Tracers and impact cosmetics use a separate
+ * deferred visual pipeline.
  */
 public final class WeaponMechanicsHitscanService implements Listener {
 
@@ -34,8 +35,6 @@ public final class WeaponMechanicsHitscanService implements Listener {
 
     private final Logger logger;
     private final HitscanSettings settings;
-    private final ServerPlatform scheduler;
-    private HitscanCombatQueue combatQueue;
     private final HitscanVisualQueue visualQueue;
     private final Optional<ProjectileTickGuard> tickGuard;
     private final Method getProjectile;
@@ -66,7 +65,6 @@ public final class WeaponMechanicsHitscanService implements Listener {
     ) {
         this.logger = logger;
         this.settings = settings;
-        this.scheduler = scheduler;
         this.visualQueue = visualQueue;
         this.tickGuard = tickGuard;
         this.getProjectile = getProjectile;
@@ -126,13 +124,7 @@ public final class WeaponMechanicsHitscanService implements Listener {
                 }
             }, plugin);
 
-            int dispatchThreads = settings.combatDispatchThreads();
-            if (dispatchThreads > 0) {
-                logger.info("[Breach] WeaponMechanics hitscan enabled ("
-                        + dispatchThreads + " combat dispatch threads, deferred/budgeted visuals).");
-            } else {
-                logger.info("[Breach] WeaponMechanics hitscan enabled (region-dispatched combat, deferred/budgeted visuals).");
-            }
+            logger.info("[Breach] WeaponMechanics hitscan enabled (inline region combat, deferred/budgeted visuals).");
         } catch (ReflectiveOperationException ex) {
             logger.warning("[Breach] Failed to register WeaponMechanics hitscan: " + ex.getMessage());
         }
@@ -163,14 +155,16 @@ public final class WeaponMechanicsHitscanService implements Listener {
             Method getProjectileSettings = projectileClass.getMethod("getProjectileSettings");
             Method getMaximumTravelDistance = projectileSettingsClass.getMethod("getMaximumTravelDistance");
 
+            HitscanLaserBeamRenderer laserRenderer = new HitscanLaserBeamRenderer(scheduler, settings);
+            HitscanLaserDebugService.register(laserRenderer, settings);
             HitscanVisualQueue visualQueue = new HitscanVisualQueue(
                     plugin,
                     scheduler,
                     settings,
-                    new HitscanVisualRenderer(settings)
+                    new HitscanVisualRenderer(settings, laserRenderer)
             );
 
-            WeaponMechanicsHitscanService service = new WeaponMechanicsHitscanService(
+            return new WeaponMechanicsHitscanService(
                     logger,
                     settings,
                     scheduler,
@@ -186,8 +180,6 @@ public final class WeaponMechanicsHitscanService implements Listener {
                     getProjectileSettings,
                     getMaximumTravelDistance
             );
-            service.combatQueue = new HitscanCombatQueue(plugin, scheduler, settings, service::resolveCombat);
-            return service;
         } catch (ReflectiveOperationException ex) {
             logger.log(Level.FINE, "[Breach] WeaponMechanics hitscan reflection init failed", ex);
             return null;
@@ -203,7 +195,7 @@ public final class WeaponMechanicsHitscanService implements Listener {
         if (runnableGuard.isPresent()) {
             return runnableGuard;
         }
-        logger.fine("[Breach] Hitscan could not pause WM projectile ticks; combat falls back to immediate region dispatch.");
+        logger.fine("[Breach] Hitscan could not pause WM projectile ticks; WM may still advance one tick before removal.");
         return Optional.empty();
     }
 
@@ -269,26 +261,18 @@ public final class WeaponMechanicsHitscanService implements Listener {
                 return;
             }
 
-            double range = resolveRange(projectile);
-            HitscanCombatJob job = new HitscanCombatJob(projectile, start, direction, range);
+            pauseProjectileTicking(projectile);
 
-            if (!pauseProjectileTicking(projectile)) {
-                dispatchCombatImmediately(job);
-                return;
-            }
-
-            combatQueue.enqueueOrDispatch(job);
+            // WeaponShootEvent fires on the shooter's region thread. Scheduling runAtLocation here would defer the
+            // ray to the next region tick on Folia and make moving targets feel unhittable.
+            resolveCombat(new HitscanCombatJob(projectile, start, direction, resolveRange(projectile)));
         } catch (ReflectiveOperationException ex) {
             logger.log(Level.FINE, "[Breach] WeaponMechanics hitscan shot failed", ex);
         }
     }
 
-    private boolean pauseProjectileTicking(Object projectile) {
-        return tickGuard.map(guard -> guard.pauseTicking(projectile)).orElse(false);
-    }
-
-    private void dispatchCombatImmediately(HitscanCombatJob job) {
-        scheduler.runAtLocation(job.start(), () -> resolveCombat(job));
+    private void pauseProjectileTicking(Object projectile) {
+        tickGuard.ifPresent(guard -> guard.pauseTicking(projectile));
     }
 
     private void resolveCombat(HitscanCombatJob job) {
@@ -317,8 +301,8 @@ public final class WeaponMechanicsHitscanService implements Listener {
                     direction,
                     start.distance(end),
                     range,
-                    settings.tracerSpacingBlocks(),
-                    settings.maxTracerPoints()
+                    settings.usesLaserTracer() ? 0.0 : settings.tracerSpacingBlocks(),
+                    settings.usesLaserTracer() ? 0 : settings.maxTracerPoints()
             );
             visualQueue.enqueueAsync(visualJob);
         } catch (ReflectiveOperationException ex) {
@@ -345,9 +329,6 @@ public final class WeaponMechanicsHitscanService implements Listener {
     }
 
     private void shutdown() {
-        if (combatQueue != null) {
-            combatQueue.close();
-        }
         HandlerList.unregisterAll(this);
     }
 

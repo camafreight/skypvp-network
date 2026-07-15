@@ -15,7 +15,6 @@ import java.util.UUID;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.library.packet.NpcFakeLightVisual;
@@ -51,7 +50,6 @@ import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
 
 public final class HolographicLibrary implements Listener {
-   private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
    private static final double LINE_SPACING = 0.28;
    private static final double HITBOX_VERTICAL_OFFSET = 0.0;
    private static final int TEXT_DISPLAY_LINE_WIDTH = 4096;
@@ -69,6 +67,11 @@ public final class HolographicLibrary implements Listener {
    private final Map<UUID, Map<String, Integer>> playerPages = new ConcurrentHashMap<>();
    private PlatformTask syncTask;
    private long globalTick = 0L;
+   /** Border oscillation reloads the same chunk; debounce hologram re-apply. */
+   private static final long CHUNK_LOAD_DEBOUNCE_MS = 2_500L;
+   /** Animated holograms do not need 20 Hz entity transforms on Folia. */
+   private static final long HOLOGRAM_SYNC_PERIOD_TICKS = 4L;
+   private final ConcurrentHashMap<String, Long> lastChunkHoloApplyMs = new ConcurrentHashMap<>();
 
    public HolographicLibrary(PaperCorePlugin plugin) {
       this.plugin = plugin;
@@ -100,15 +103,26 @@ public final class HolographicLibrary implements Listener {
       String worldName = world.getName();
       int cx = chunk.getX();
       int cz = chunk.getZ();
+      String chunkKey = worldName + ':' + cx + ':' + cz;
+      long now = System.currentTimeMillis();
+      Long previous = this.lastChunkHoloApplyMs.get(chunkKey);
+      if (previous != null && now - previous < CHUNK_LOAD_DEBOUNCE_MS) {
+         return;
+      }
 
+      boolean touched = false;
       for (HologramDefinition def : this.activeDefinitions.values()) {
          if (def.anchor != null && worldName.equals(def.anchor.world)) {
             int defCx = NumberConversions.floor(def.anchor.x) >> 4;
             int defCz = NumberConversions.floor(def.anchor.z) >> 4;
             if (defCx == cx && defCz == cz) {
+               touched = true;
                this.applyDefinition(world, def, this.activeDefinitions);
             }
          }
+      }
+      if (touched) {
+         this.lastChunkHoloApplyMs.put(chunkKey, now);
       }
    }
 
@@ -120,6 +134,11 @@ public final class HolographicLibrary implements Listener {
       HolographicLibrary.ActiveHologramState state = this.activeStates.get(this.stateKey(player.getWorld(), this.normalizeId(hologramId)));
       if (state != null) {
          for (HolographicLibrary.LineState ls : state.lines()) {
+            // entityId is null for lines whose display hasn't spawned yet (packet holos,
+            // pending region spawns) — getEntity(null) throws and killed the NPC distance tick.
+            if (ls.entityId == null) {
+               continue;
+            }
             Entity entity = player.getWorld().getEntity(ls.entityId);
             if (entity != null) {
                player.hideEntity(this.plugin, entity);
@@ -604,7 +623,14 @@ public final class HolographicLibrary implements Listener {
          display.setBillboard(Billboard.FIXED);
       }
       display.setPersistent(false);
+      boolean freeze = definition == null || definition.freeze;
       display.setTeleportDuration(0);
+      display.setInterpolationDuration(freeze ? 0 : 5);
+      display.setInterpolationDelay(0);
+      float viewRange = definition != null ? definition.viewRange : 1.0F;
+      if (viewRange > 0.0F) {
+         display.setViewRange(viewRange);
+      }
       float defScale = definition != null ? (float) definition.scale : 1.0f;
       if (defScale <= 0.0f) defScale = 1.0f;
       float s = parsedLine.scale * defScale;
@@ -712,7 +738,7 @@ public final class HolographicLibrary implements Listener {
          String trimmed = displayText.trim();
          Component comp;
          if ((!trimmed.startsWith("{") || !trimmed.endsWith("}")) && (!trimmed.startsWith("[") || !trimmed.endsWith("]"))) {
-            comp = MINI_MESSAGE.deserialize(displayText);
+            comp = ServerTextUtil.miniMessageComponent(displayText);
          } else {
             comp = GsonComponentSerializer.gson().deserialize(displayText);
          }
@@ -746,9 +772,32 @@ public final class HolographicLibrary implements Listener {
       }
       stand.setPersistent(false);
       stand.setDefaultBackground(false);
-      stand.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0));
-      stand.setLineWidth(TEXT_DISPLAY_LINE_WIDTH);
+      if (definition != null && definition.background) {
+         stand.setBackgroundColor(org.bukkit.Color.fromARGB(64, 0, 0, 0));
+      } else {
+         stand.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0));
+      }
+      stand.setSeeThrough(definition != null && definition.seeThrough);
+      stand.setShadowed(definition != null && definition.shadowed);
+      if (definition != null && definition.textAlignment != null) {
+         try {
+            stand.setAlignment(org.bukkit.entity.TextDisplay.TextAlignment.valueOf(
+                  definition.textAlignment.toUpperCase(Locale.ROOT)));
+         } catch (IllegalArgumentException ignored) {
+            stand.setAlignment(org.bukkit.entity.TextDisplay.TextAlignment.CENTER);
+         }
+      } else {
+         stand.setAlignment(org.bukkit.entity.TextDisplay.TextAlignment.CENTER);
+      }
+      float viewRange = definition != null ? definition.viewRange : 1.0F;
+      if (viewRange > 0.0F) {
+         stand.setViewRange(viewRange);
+      }
+      boolean freeze = definition == null || definition.freeze;
       stand.setTeleportDuration(0);
+      stand.setInterpolationDuration(freeze ? 0 : 5);
+      stand.setInterpolationDelay(0);
+      stand.setLineWidth(TEXT_DISPLAY_LINE_WIDTH);
       this.applyFullBrightness(stand);
       float defScale = definition != null ? (float) definition.scale : 1.0f;
       if (defScale <= 0.0f) defScale = 1.0f;
@@ -805,7 +854,7 @@ public final class HolographicLibrary implements Listener {
          String trimmed = displayText.trim();
          Component comp;
          if ((!trimmed.startsWith("{") || !trimmed.endsWith("}")) && (!trimmed.startsWith("[") || !trimmed.endsWith("]"))) {
-            comp = MINI_MESSAGE.deserialize(displayText);
+            comp = ServerTextUtil.miniMessageComponent(displayText);
          } else {
             comp = GsonComponentSerializer.gson().deserialize(displayText);
          }
@@ -831,7 +880,14 @@ public final class HolographicLibrary implements Listener {
          display.setBillboard(Billboard.CENTER);
       }
       display.setPersistent(false);
+      boolean freeze = definition == null || definition.freeze;
       display.setTeleportDuration(0);
+      display.setInterpolationDuration(freeze ? 0 : 5);
+      display.setInterpolationDelay(0);
+      float viewRange = definition != null ? definition.viewRange : 1.0F;
+      if (viewRange > 0.0F) {
+         display.setViewRange(viewRange);
+      }
       float s = parsedLine.scale * (definition != null ? (float) definition.scale : 1.0f);
       display.setTransformation(
          new Transformation(
@@ -962,7 +1018,11 @@ public final class HolographicLibrary implements Listener {
 
    private void ensureSyncTask() {
       if (this.syncTask == null) {
-         this.syncTask = this.plugin.platformScheduler().runGlobalTimer(this::syncHolograms, 1L, 1L);
+         this.syncTask = this.plugin.platformScheduler().runGlobalTimer(
+               this::syncHolograms,
+               HOLOGRAM_SYNC_PERIOD_TICKS,
+               HOLOGRAM_SYNC_PERIOD_TICKS
+         );
       }
    }
 
@@ -1264,26 +1324,22 @@ public final class HolographicLibrary implements Listener {
          String text = rawText == null ? "" : rawText;
          if (text.contains("<anim:scroll>")) {
             anim = HolographicLibrary.HologramAnimation.SCROLL;
-            text = text.replace("<anim:scroll>", "");
          } else if (text.contains("<anim:typewriter>")) {
             anim = HolographicLibrary.HologramAnimation.TYPEWRITER;
-            text = text.replace("<anim:typewriter>", "");
          } else if (text.contains("<anim:blink>")) {
             anim = HolographicLibrary.HologramAnimation.BLINK;
-            text = text.replace("<anim:blink>", "");
          } else if (text.contains("<anim:rainbow>")) {
             anim = HolographicLibrary.HologramAnimation.RAINBOW;
-            text = text.replace("<anim:rainbow>", "");
          } else if (text.contains("<anim:bounce>")) {
             anim = HolographicLibrary.HologramAnimation.BOUNCE;
-            text = text.replace("<anim:bounce>", "");
          } else if (text.contains("<anim:rain>")) {
             anim = HolographicLibrary.HologramAnimation.RAIN;
-            text = text.replace("<anim:rain>", "");
          } else if (text.contains("<anim:shower>")) {
             anim = HolographicLibrary.HologramAnimation.SHOWER;
-            text = text.replace("<anim:shower>", "");
          }
+         // <anim:glow> is stripped as markup; hologram lines don't run scoreboard glow-phase injection.
+         text = network.skypvp.shared.ServerTextUtil.stripAnimationMarkup(text);
+         text = network.skypvp.shared.ServerTextUtil.applySmallCapsTags(text);
 
          this.animation = anim;
          this.baseText = text;

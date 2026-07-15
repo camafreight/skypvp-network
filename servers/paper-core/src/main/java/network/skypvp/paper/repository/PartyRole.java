@@ -24,6 +24,14 @@ public enum PartyRole {
         return this == LEADER || this == CO_LEADER;
     }
 
+    /**
+     * Whether this member may cancel the whole party's pending breach join. Restricted to trusted ranks (leader,
+     * co-leader, trusted) so a plain member cannot troll the group by aborting the raid entry for everyone.
+     */
+    public boolean canCancelBreach() {
+        return this == LEADER || this == CO_LEADER || this == TRUSTED;
+    }
+
     public String displayName() {
         return switch (this) {
             case LEADER -> "Leader";

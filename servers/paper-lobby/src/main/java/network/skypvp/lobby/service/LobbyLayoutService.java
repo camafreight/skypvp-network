@@ -284,7 +284,7 @@ public final class LobbyLayoutService {
       WorldPresetMeta meta = this.worldPresetService.readMeta(presetId);
       WorldPoint spawn = this.currentLayout.spawn == null ? new WorldPoint() : this.currentLayout.spawn;
       WorldPresetMeta updated = new WorldPresetMeta(
-         presetId, meta.description(), (int)Math.floor(spawn.x), (int)Math.floor(spawn.y), (int)Math.floor(spawn.z), spawn.yaw, spawn.pitch
+         presetId, meta.description(), spawn.x, spawn.y, spawn.z, spawn.yaw, spawn.pitch
       );
 
       try {

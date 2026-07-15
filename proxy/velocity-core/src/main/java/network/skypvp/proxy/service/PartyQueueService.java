@@ -18,15 +18,20 @@ import java.util.UUID;
 import java.util.Map.Entry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import network.skypvp.shared.BreachPartyQueueDeployEvent;
+import network.skypvp.shared.NetworkChannels;
+import network.skypvp.shared.RedisEventPublisher;
 import org.slf4j.Logger;
 
 public final class PartyQueueService {
    private final ProxyServer proxyServer;
    private final ServerRoutingService routingService;
    private final PartyTransferGate transferGate;
+   private final RedisEventPublisher redisPublisher;
    private final Logger logger;
    private final Map<String, Deque<PartyQueueService.GroupQueueEntry>> groupQueues = new HashMap<>();
    private final Set<UUID> queuedMembers = new HashSet<>();
+   private volatile BreachPlayMatchmakingService breachPlayMatchmaking;
    private long totalQueuedGroups;
    private long totalMovedGroups;
    private long blockedNoTarget;
@@ -34,11 +39,22 @@ public final class PartyQueueService {
    private long droppedOfflineGroups;
    private long lastDrainEpochMillis;
 
-   public PartyQueueService(ProxyServer proxyServer, ServerRoutingService routingService, PartyTransferGate transferGate, Logger logger) {
+   public PartyQueueService(
+      ProxyServer proxyServer,
+      ServerRoutingService routingService,
+      PartyTransferGate transferGate,
+      RedisEventPublisher redisPublisher,
+      Logger logger
+   ) {
       this.proxyServer = proxyServer;
       this.routingService = routingService;
       this.transferGate = transferGate;
+      this.redisPublisher = redisPublisher;
       this.logger = logger;
+   }
+
+   public void bindBreachPlayMatchmaking(BreachPlayMatchmakingService breachPlayMatchmaking) {
+      this.breachPlayMatchmaking = breachPlayMatchmaking;
    }
 
    public synchronized PartyQueueService.QueueGroupResult enqueueBreach(UUID partyId, UUID leaderId, List<UUID> members) {
@@ -142,15 +158,64 @@ public final class PartyQueueService {
                      this.groupQueues.remove(queueKey);
                   }
                } else {
-                  Optional<RegisteredServer> targetOpt = this.routingService.selectBestTargetForQueue(queueKey, Set.of());
+                  Optional<RegisteredServer> targetOpt;
+                  ServerRoutingService.BreachInstanceTarget breachTarget = null;
+                  if (this.usesBreachInstanceDeploy(queueKey)) {
+                     Optional<ServerRoutingService.BreachInstanceTarget> instanceTarget =
+                        this.routingService.selectBestBreachInstanceForParty(online.size(), Set.of());
+                     if (instanceTarget.isPresent()) {
+                        breachTarget = instanceTarget.get();
+                        targetOpt = this.proxyServer.getServer(breachTarget.serverId());
+                     } else {
+                        this.blockedNoTarget++;
+                        continue;
+                     }
+                  } else {
+                     targetOpt = this.routingService.selectBestTargetForQueue(queueKey, Set.of());
+                  }
                   if (targetOpt.isEmpty()) {
                      this.blockedNoTarget++;
                   } else {
                      RegisteredServer target = targetOpt.get();
-                     int availableSlots = this.routingService.availableSlotsForServer(target.getServerInfo().getName());
+                     int availableSlots = breachTarget != null
+                        ? breachTarget.openSlots()
+                        : this.routingService.availableSlotsForServer(target.getServerInfo().getName());
                      if (availableSlots < online.size()) {
                         this.blockedCapacity++;
                      } else {
+                        if (breachTarget != null && this.redisPublisher != null) {
+                           try {
+                              this.redisPublisher.publishJson(
+                                 NetworkChannels.BREACH_PARTY_QUEUE_DEPLOY,
+                                 new BreachPartyQueueDeployEvent(
+                                    head.partyId(),
+                                    head.leaderId(),
+                                    breachTarget.serverId(),
+                                    breachTarget.instanceId(),
+                                    head.members(),
+                                    System.currentTimeMillis()
+                                 )
+                              );
+                              if (this.breachPlayMatchmaking != null) {
+                                 this.breachPlayMatchmaking.registerPendingDeploy(
+                                    head.partyId(),
+                                    breachTarget.serverId(),
+                                    breachTarget.instanceId(),
+                                    head.members()
+                                 );
+                              }
+                           } catch (RuntimeException exception) {
+                              this.logger.warn(
+                                 "Failed to publish breach party deploy for party {} -> {}#{}: {}",
+                                 head.partyId(),
+                                 breachTarget.serverId(),
+                                 breachTarget.instanceId(),
+                                 exception.getMessage()
+                              );
+                              this.blockedNoTarget++;
+                              continue;
+                           }
+                        }
                         queue.pollFirst();
                         this.queuedMembers.removeAll(head.members());
 
@@ -160,18 +225,31 @@ public final class PartyQueueService {
                               this.transferGate.authorize(member.getUniqueId(), targetServerId);
                            }
                            member.createConnectionRequest(target).fireAndForget();
-                           member.sendMessage(
-                              ServerTextUtil.component("&a" + "Party queue ready: sending your group to " + target.getServerInfo().getName() + ".")
-                           );
+                           if (breachTarget != null) {
+                              member.sendMessage(
+                                 ServerTextUtil.component(
+                                    "&aParty queue ready: sending your group to breach &e"
+                                       + breachTarget.mapId()
+                                       + "&a on &f"
+                                       + target.getServerInfo().getName()
+                                       + "&a."
+                                 )
+                              );
+                           } else {
+                              member.sendMessage(
+                                 ServerTextUtil.component("&a" + "Party queue ready: sending your group to " + target.getServerInfo().getName() + ".")
+                              );
+                           }
                         }
 
                         movedGroups++;
                         this.totalMovedGroups++;
                         this.logger
                            .info(
-                              "Drained party queue '{}' -> '{}' for party {} ({} online members)",
+                              "Drained party queue '{}' -> '{}'{} for party {} ({} online members)",
                               queueKey,
                               target.getServerInfo().getName(),
+                              breachTarget == null ? "" : " instance=" + breachTarget.instanceId(),
                               head.partyId(),
                               online.size()
                            );
@@ -186,6 +264,11 @@ public final class PartyQueueService {
       }
 
       return movedGroups;
+   }
+
+   /** Party queues that reserve a breach instance and publish {@link NetworkChannels#BREACH_PARTY_QUEUE_DEPLOY}. */
+   private boolean usesBreachInstanceDeploy(String queueKey) {
+      return "breach".equalsIgnoreCase(queueKey);
    }
 
    public synchronized boolean isQueued(UUID memberId) {

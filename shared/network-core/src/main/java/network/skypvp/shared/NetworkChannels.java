@@ -42,6 +42,22 @@ public final class NetworkChannels {
      * styled PMs to online players on the network.
      */
     public static final String PRIVATE_MESSAGE = "SkyPvP:network:privatemessage";
+    /**
+     * Breach disconnected presence: extraction publishes when a disconnected raider's stand-in body is hung or cleared.
+     * The proxy tracks this to route reconnects straight back to the hosting extraction pod.
+     */
+    public static final String BREACH_DISCONNECTED_PRESENCE = "SkyPvP:network:breach-disconnected";
+    /** @deprecated legacy channel name; proxy still subscribes during rolling deploys */
+    public static final String BREACH_AWAY_PRESENCE = "SkyPvP:network:breach-away";
+    /** Proxy → extraction: party queue admission to a specific breach instance before members connect. */
+    public static final String BREACH_PARTY_QUEUE_DEPLOY = "SkyPvP:network:breach-party-deploy";
+    /** Proxy → extraction: cancel a pending party deploy (disconnect / leave during join). */
+    public static final String BREACH_PARTY_DEPLOY_CANCEL = "SkyPvP:network:breach-party-deploy-cancel";
+    /**
+     * Offline eliminated raider still tied to an active breach: proxy routes reconnects to the hosting extraction pod
+     * as spectators instead of the lobby.
+     */
+    public static final String BREACH_SPECTATOR_PRESENCE = "SkyPvP:network:breach-spectator";
 
     private NetworkChannels() {
     }

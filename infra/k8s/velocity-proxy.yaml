@@ -68,6 +68,8 @@ spec:
           ports:
             - containerPort: 25565
               name: minecraft
+            - containerPort: 8765
+              name: resourcepack
           env:
             - name: SPVP_REDIS_HOST
               value: redis
@@ -77,6 +79,26 @@ spec:
               value: postgres
             - name: SPVP_POSTGRES_PORT
               value: "5432"
+            - name: SPVP_RESOURCE_PACK_ENABLED
+              value: "true"
+            - name: SPVP_RESOURCE_PACK_FORCE
+              value: "true"
+            # Pack is served from skypvp-web (Cloudflare HTTPS) — no proxy :8765 / no home IP in DNS.
+            - name: SPVP_RESOURCE_PACK_SERVE_LOCALLY
+              value: "false"
+            - name: SPVP_RESOURCE_PACK_URL
+              value: "https://skypvp.gg/pack/skypvp-core.zip"
+            - name: SPVP_RESOURCE_PACK_META_URL
+              value: "https://skypvp.gg/pack/skypvp-core.meta.json"
+            - name: SPVP_RESOURCE_PACK_META_REFRESH_SECONDS
+              value: "60"
+            # Optional bootstrap only — live SHA1 is polled from META_URL (no proxy restart on pack sync).
+            - name: SPVP_RESOURCE_PACK_SHA1
+              value: ""
+            - name: SPVP_RESOURCE_PACK_SERVE_PORT
+              value: "8765"
+            - name: SPVP_RESOURCE_PACK_PUBLIC_HOST
+              value: ""
             - name: SPVP_REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -142,10 +164,10 @@ spec:
                   name: skypvp-network-env
                   key: CHAT_TRANSLATION_DEBUG
                   optional: true
-            # Without TCPShield Bedrock tunnel plan, the RealIP plugin blocks direct/local
-            # connections and breaks Geyser handshakes. Remove when routing Java-only via
-            # TCPShield network and using direct UDP 19132 for Bedrock.
+            # TCPShield must stay installed with only-allow-proxy=true (blocks direct backend bypass).
             - name: SPVP_DISABLE_TCPSHIELD
+              value: "false"
+            - name: SPVP_TCPSHIELD_ONLY_ALLOW_PROXY
               value: "true"
             - name: SPVP_PROXY_HEAP
               value: "2G"
@@ -172,6 +194,15 @@ kind: Service
 metadata:
   name: skypvp-proxy
   namespace: skypvp-network
+  annotations:
+    # Game nodes are tainted skypvp.gg/role=game:NoSchedule. Without this toleration, ServiceLB
+    # only schedules on master after a Service update — which broke TCPShield→origin reachability
+    # on node-1/node-2 (192.168.0.3 / .4) that previously hosted svclb pods.
+    svccontroller.k3s.cattle.io/tolerations: |
+      - key: skypvp.gg/role
+        operator: Equal
+        value: game
+        effect: NoSchedule
 spec:
   type: LoadBalancer
   selector:
@@ -185,3 +216,4 @@ spec:
       port: 19132
       targetPort: 19132
       protocol: UDP
+    # Pack is served from skypvp-web (https://skypvp.gg/pack/...) — do not expose :8765.

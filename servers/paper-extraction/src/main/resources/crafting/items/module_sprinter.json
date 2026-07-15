@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_sprinter",
+  "displayName": "Sprinter Module",
+  "moduleEffects": [
+    {"label": "12% Movement Speed", "positive": true},
+    {"label": "5% Defense", "positive": false}
+  ]
+}

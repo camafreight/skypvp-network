@@ -34,6 +34,30 @@ public final class GuiItems {
       return item;
    }
 
+   /**
+    * Clones a canonical item stack (usually built by a custom-item factory, so it carries the
+    * real item model/tint) and swaps only the GUI-facing display name + lore. Prefer this over
+    * {@code named(Material, ...)} when the icon represents an actual game item — art changes
+    * then propagate to every menu automatically.
+    */
+   public static ItemStack restyled(ItemStack base, String name, List<String> lore) {
+      if (base == null || base.getType().isAir()) {
+         return named(Material.BARRIER, name, lore);
+      }
+      ItemStack item = base.clone();
+      item.setAmount(1);
+      ItemMeta meta = item.getItemMeta();
+      meta.displayName(ServerTextUtil.miniMessageComponent(name));
+      meta.lore(lore.stream().map(ServerTextUtil::miniMessageComponent).toList());
+      // Display-only: strip ALL persistent data (custom-item identity included) so GUI
+      // frameworks never mistake the icon for a real owned item — deposit-slot close
+      // refunds were handing canonical placeholder stacks to players.
+      meta.getPersistentDataContainer().getKeys()
+              .forEach(meta.getPersistentDataContainer()::remove);
+      item.setItemMeta(meta);
+      return item;
+   }
+
    public static ItemStack playerHead(Player player, String name, List<String> lore) {
       ItemStack item = new ItemStack(Material.PLAYER_HEAD);
       SkullMeta meta = (SkullMeta)item.getItemMeta();

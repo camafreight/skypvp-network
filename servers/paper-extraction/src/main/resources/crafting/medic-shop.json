@@ -1,0 +1,11 @@
+{
+  "listings": [
+    {"id": "bandage_rag", "material": {"id": "cloth_scrap", "amount": 4, "displayName": "Cloth Scrap"}},
+    {"id": "sterile_bandage", "material": {"id": "fiber_bundle", "amount": 3, "displayName": "Fiber Bundle"}},
+    {"id": "medkit", "material": {"id": "field_suture", "amount": 4, "displayName": "Field Suture"}},
+    {"id": "surgical_kit", "material": {"id": "aether_resin", "amount": 2, "displayName": "Aether Resin"}},
+    {"id": "adrenaline_shot", "material": {"id": "stim_compound", "amount": 2, "displayName": "Stim Compound"}},
+    {"id": "stamina_stabilizer", "material": {"id": "stim_compound", "amount": 3, "displayName": "Stim Compound"}},
+    {"id": "overdrive_serum", "material": {"id": "aether_resin", "amount": 3, "displayName": "Aether Resin"}}
+  ]
+}

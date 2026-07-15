@@ -26,6 +26,26 @@ dependencies {
     testImplementation "com.velocitypowered:velocity-api:${rootProject.ext.velocityApiVersion}"
 }
 
+def skypvpResourcePackRoot = rootProject.file('resource-packs/skypvp-core')
+def skypvpResourcePackBuildDir = layout.buildDirectory.dir('resource-pack')
+
+tasks.register('packageSkyPvPResourcePack', Zip) {
+    group = 'build'
+    description = 'Packages the SkyPvP core resource pack into skypvp-core.zip'
+    from(skypvpResourcePackRoot) {
+        exclude 'README.md'
+    }
+    archiveFileName = 'skypvp-core.zip'
+    destinationDirectory = skypvpResourcePackBuildDir
+}
+
+processResources {
+    dependsOn packageSkyPvPResourcePack
+    from(packageSkyPvPResourcePack.archiveFile) {
+        into 'resource-pack'
+    }
+}
+
 jar {
     archiveClassifier = 'thin'
 }
@@ -33,6 +53,7 @@ jar {
 shadowJar {
     archiveClassifier = ''
     archiveFileName = 'skypvp-velocity-core.jar'
+    dependsOn packageSkyPvPResourcePack
 }
 
 build {

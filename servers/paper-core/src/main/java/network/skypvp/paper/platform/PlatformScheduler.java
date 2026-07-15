@@ -26,7 +26,7 @@ public final class PlatformScheduler implements ServerPlatform {
    private final Plugin plugin;
    private final boolean folia;
    private final ScheduledExecutorService foliaAsyncExecutor;
-   private final ExecutorService foliaWorkExecutor;
+   private final ExecutorService workExecutor;
    private final Object globalRegionScheduler;
    private final Method globalRun;
    private final Method globalRunDelayed;
@@ -88,19 +88,20 @@ public final class PlatformScheduler implements ServerPlatform {
          : null;
       // One-off async work (DB queries, blocking world-copy I/O, command handlers) runs on a
       // separate elastic pool so a few blocking tasks can't starve everything. The scheduled pool
-      // above is reserved for periodic async timers only.
-      this.foliaWorkExecutor = foliaDetected
-         ? Executors.newCachedThreadPool(new java.util.concurrent.ThreadFactory() {
-            private final AtomicInteger counter = new AtomicInteger();
+      // above is reserved for periodic async timers only. Used on BOTH platforms: Bukkit's async
+      // scheduler only dispatches from the tick heartbeat, so tasks submitted during onEnable
+      // never start until after every plugin has enabled — any boot-time join() on such a task
+      // deadlocks the server (this hung the Paper lobby; Folia never had the problem).
+      this.workExecutor = Executors.newCachedThreadPool(new java.util.concurrent.ThreadFactory() {
+         private final AtomicInteger counter = new AtomicInteger();
 
-            @Override
-            public Thread newThread(Runnable runnable) {
-               Thread thread = new Thread(runnable, plugin.getName() + "-work-" + this.counter.incrementAndGet());
-               thread.setDaemon(true);
-               return thread;
-            }
-         })
-         : null;
+         @Override
+         public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, plugin.getName() + "-work-" + this.counter.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+         }
+      });
    }
 
    public static PlatformScheduler create(Plugin plugin) {
@@ -138,9 +139,64 @@ public final class PlatformScheduler implements ServerPlatform {
    }
 
    @Override
+   public boolean isOwnedByCurrentRegion(Entity entity) {
+      if (!this.folia || entity == null) {
+         return true;
+      }
+      try {
+         return (Boolean) org.bukkit.Bukkit.class
+               .getMethod("isOwnedByCurrentRegion", Entity.class)
+               .invoke(null, entity);
+      } catch (ReflectiveOperationException | ClassCastException ex) {
+         return true;
+      }
+   }
+
+   @Override
+   public boolean isOwnedByCurrentRegion(Location location) {
+      if (!this.folia || location == null || location.getWorld() == null) {
+         return true;
+      }
+      try {
+         return (Boolean) org.bukkit.Bukkit.class
+               .getMethod("isOwnedByCurrentRegion", Location.class)
+               .invoke(null, location);
+      } catch (ReflectiveOperationException | ClassCastException ex) {
+         return true;
+      }
+   }
+
+   @Override
+   public void runOwned(Entity entity, Runnable task) {
+      Objects.requireNonNull(task, "task");
+      if (entity == null) {
+         return;
+      }
+      if (this.isOwnedByCurrentRegion(entity)) {
+         task.run();
+         return;
+      }
+      this.runAtEntity(entity, task);
+   }
+
+   @Override
    public void runAtEntity(Entity entity, Runnable task) {
       Objects.requireNonNull(task, "task");
       if (entity == null) {
+         return;
+      }
+      if (this.folia) {
+         // EntityScheduler executes on whatever region owns the entity AT RUN TIME and
+         // retires cleanly when the entity is removed. Scheduling by the entity's location
+         // instead races region merges/splits and throws "Accessing entity state off
+         // owning region's thread" once the cached region dies.
+         try {
+            Object entityScheduler = this.entityRun.invoke(entity);
+            entityScheduler.getClass().getMethod("execute", Plugin.class, Runnable.class, Runnable.class, long.class)
+               .invoke(entityScheduler, this.plugin, task, null, 1L);
+         } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Failed to schedule entity task on Folia", ex);
+         }
          return;
       }
       this.runAtLocation(entity.getLocation(), task);
@@ -184,11 +240,7 @@ public final class PlatformScheduler implements ServerPlatform {
 
    public void runAsync(Runnable task) {
       Objects.requireNonNull(task, "task");
-      if (this.folia) {
-         this.foliaWorkExecutor.execute(task);
-      } else {
-         this.plugin.getServer().getScheduler().runTaskAsynchronously(this.plugin, task);
-      }
+      this.workExecutor.execute(task);
    }
 
    public void runGlobal(Runnable task) {
@@ -308,6 +360,40 @@ public final class PlatformScheduler implements ServerPlatform {
       return handle;
    }
 
+   /**
+    * Repeating task pinned to an entity. On Folia this registers ONE fixed-rate task with the
+    * entity's scheduler: it always runs on the region that owns the entity at fire time,
+    * follows the entity across region merges/splits, and auto-retires when the entity is
+    * removed. Prefer this over re-submitting {@link #runAtEntity} every tick from a global
+    * heartbeat — per-tick cross-thread submission is pure queue/allocation overhead.
+    *
+    * @param retired invoked once when the entity is removed and the task retires (Folia only;
+    *                on Paper cancel the returned handle from your own lifecycle hooks)
+    */
+   public PlatformTask runAtEntityTimer(Entity entity, Runnable task, Runnable retired, long delayTicks, long periodTicks) {
+      Objects.requireNonNull(entity, "entity");
+      Objects.requireNonNull(task, "task");
+      AtomicBoolean cancelled = new AtomicBoolean(false);
+      Runnable wrapped = () -> {
+         if (!cancelled.get()) {
+            task.run();
+         }
+      };
+      PlatformTask handle = new PlatformTask(cancelled);
+      if (this.folia) {
+         try {
+            Object entityScheduler = this.entityRun.invoke(entity);
+            Consumer<Object> consumer = ignored -> wrapped.run();
+            this.entityRunAtFixedRate.invoke(entityScheduler, this.plugin, consumer, retired, delayTicks, periodTicks);
+         } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Failed to schedule entity timer on Folia", ex);
+         }
+      } else {
+         handle.bindPaperTask(this.plugin.getServer().getScheduler().runTaskTimer(this.plugin, wrapped, delayTicks, periodTicks));
+      }
+      return handle;
+   }
+
    public void runAtLocation(Location location, Runnable task) {
       Objects.requireNonNull(location, "location");
       Objects.requireNonNull(task, "task");
@@ -382,8 +468,8 @@ public final class PlatformScheduler implements ServerPlatform {
       if (this.foliaAsyncExecutor != null) {
          this.foliaAsyncExecutor.shutdownNow();
       }
-      if (this.foliaWorkExecutor != null) {
-         this.foliaWorkExecutor.shutdownNow();
+      if (this.workExecutor != null) {
+         this.workExecutor.shutdownNow();
       }
    }
 

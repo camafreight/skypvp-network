@@ -16,6 +16,8 @@ import network.skypvp.paper.inventory.vault.VaultSlotAccess;
 public final class ExtractionInventoryRepository {
    private final AsyncDbExecutor asyncDbExecutor;
    private final Map<ContainerKey, Map<Integer, String>> containerCache = new ConcurrentHashMap<>();
+   /** Vault unlocked-row counts; without this every vault open paid a DB round trip. */
+   private final Map<UUID, Integer> vaultRowsCache = new ConcurrentHashMap<>();
 
    public ExtractionInventoryRepository(AsyncDbExecutor asyncDbExecutor) {
       this.asyncDbExecutor = asyncDbExecutor;
@@ -34,6 +36,15 @@ public final class ExtractionInventoryRepository {
          return;
       }
       this.containerCache.keySet().removeIf(key -> key.playerId().equals(playerId));
+      this.vaultRowsCache.remove(playerId);
+   }
+
+   /** Cached vault row count, if this player's rows were loaded (or purchased) this session. */
+   public Optional<Integer> getCachedVaultUnlockedRows(UUID playerId) {
+      if (playerId == null) {
+         return Optional.empty();
+      }
+      return Optional.ofNullable(this.vaultRowsCache.get(playerId));
    }
 
    public void evictContainer(UUID playerId, String containerType) {
@@ -64,9 +75,137 @@ public final class ExtractionInventoryRepository {
       );
    }
 
+   public CompletableFuture<Void> ensureMaterialStashProgressSchema() {
+      return this.asyncDbExecutor.method_244(
+         "pim.ensureMaterialStashProgressSchema",
+         connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(
+               "ALTER TABLE extraction_player_profiles ADD COLUMN IF NOT EXISTS material_stash_tier INT NOT NULL DEFAULT 1"
+            )) {
+               ps.executeUpdate();
+            }
+         }
+      );
+   }
+
+   public CompletableFuture<Void> ensureScrapperProgressSchema() {
+      return this.asyncDbExecutor.method_244(
+         "pim.ensureScrapperProgressSchema",
+         connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(
+               "ALTER TABLE extraction_player_profiles ADD COLUMN IF NOT EXISTS scrapper_tier INT NOT NULL DEFAULT 1"
+            )) {
+               ps.executeUpdate();
+            }
+         }
+      );
+   }
+
+   public CompletableFuture<Integer> loadScrapperTier(UUID playerId) {
+      if (playerId == null) {
+         return CompletableFuture.completedFuture(1);
+      }
+      return this.asyncDbExecutor.supply(
+         "pim.loadScrapperTier",
+         connection -> {
+            try (PreparedStatement ensure = connection.prepareStatement(
+               "INSERT INTO extraction_player_profiles (player_uuid, revision, scrapper_tier, updated_at) "
+                  + "VALUES (?, 0, 1, NOW()) ON CONFLICT (player_uuid) DO NOTHING"
+            )) {
+               ensure.setObject(1, playerId);
+               ensure.executeUpdate();
+            }
+            try (PreparedStatement ps = connection.prepareStatement(
+               "SELECT scrapper_tier FROM extraction_player_profiles WHERE player_uuid = ?"
+            )) {
+               ps.setObject(1, playerId);
+               try (ResultSet rs = ps.executeQuery()) {
+                  if (rs.next()) {
+                     return Math.max(1, rs.getInt("scrapper_tier"));
+                  }
+               }
+            }
+            return 1;
+         }
+      );
+   }
+
+   public CompletableFuture<Boolean> incrementScrapperTier(UUID playerId, int expectedTier, int maxTier) {
+      if (playerId == null) {
+         return CompletableFuture.completedFuture(false);
+      }
+      return this.asyncDbExecutor.supply(
+         "pim.incrementScrapperTier",
+         connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(
+               "UPDATE extraction_player_profiles SET scrapper_tier = scrapper_tier + 1, updated_at = NOW() "
+                  + "WHERE player_uuid = ? AND scrapper_tier = ? AND scrapper_tier < ?"
+            )) {
+               ps.setObject(1, playerId);
+               ps.setInt(2, expectedTier);
+               ps.setInt(3, maxTier);
+               return ps.executeUpdate() > 0;
+            }
+         }
+      );
+   }
+
+   public CompletableFuture<Integer> loadMaterialStashTier(UUID playerId) {
+      if (playerId == null) {
+         return CompletableFuture.completedFuture(1);
+      }
+      return this.asyncDbExecutor.supply(
+         "pim.loadMaterialStashTier",
+         connection -> {
+            try (PreparedStatement ensure = connection.prepareStatement(
+               "INSERT INTO extraction_player_profiles (player_uuid, revision, material_stash_tier, updated_at) "
+                  + "VALUES (?, 0, 1, NOW()) ON CONFLICT (player_uuid) DO NOTHING"
+            )) {
+               ensure.setObject(1, playerId);
+               ensure.executeUpdate();
+            }
+            try (PreparedStatement ps = connection.prepareStatement(
+               "SELECT material_stash_tier FROM extraction_player_profiles WHERE player_uuid = ?"
+            )) {
+               ps.setObject(1, playerId);
+               try (ResultSet rs = ps.executeQuery()) {
+                  if (rs.next()) {
+                     return Math.max(1, rs.getInt("material_stash_tier"));
+                  }
+               }
+            }
+            return 1;
+         }
+      );
+   }
+
+   public CompletableFuture<Boolean> incrementMaterialStashTier(UUID playerId, int expectedTier, int maxTier) {
+      if (playerId == null) {
+         return CompletableFuture.completedFuture(false);
+      }
+      return this.asyncDbExecutor.supply(
+         "pim.incrementMaterialStashTier",
+         connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(
+               "UPDATE extraction_player_profiles SET material_stash_tier = material_stash_tier + 1, updated_at = NOW() "
+                  + "WHERE player_uuid = ? AND material_stash_tier = ? AND material_stash_tier < ?"
+            )) {
+               ps.setObject(1, playerId);
+               ps.setInt(2, expectedTier);
+               ps.setInt(3, maxTier);
+               return ps.executeUpdate() > 0;
+            }
+         }
+      );
+   }
+
    public CompletableFuture<Integer> loadVaultUnlockedRows(UUID playerId) {
       if (playerId == null) {
          return CompletableFuture.completedFuture(VaultSlotAccess.defaultUnlockedRows());
+      }
+      Integer cached = this.vaultRowsCache.get(playerId);
+      if (cached != null) {
+         return CompletableFuture.completedFuture(cached);
       }
       return this.asyncDbExecutor.supply(
          "pim.loadVaultUnlockedRows",
@@ -91,7 +230,10 @@ public final class ExtractionInventoryRepository {
             }
             return VaultSlotAccess.defaultUnlockedRows();
          }
-      );
+      ).thenApply(rows -> {
+         this.vaultRowsCache.put(playerId, rows);
+         return rows;
+      });
    }
 
    public CompletableFuture<Boolean> incrementVaultUnlockedRows(UUID playerId, int expectedRows) {
@@ -111,7 +253,13 @@ public final class ExtractionInventoryRepository {
                return ps.executeUpdate() > 0;
             }
          }
-      );
+      ).thenApply(success -> {
+         if (Boolean.TRUE.equals(success)) {
+            // Conditional DB update succeeded, so expectedRows+1 is the authoritative value.
+            this.vaultRowsCache.put(playerId, VaultSlotAccess.clampUnlockedRows(expectedRows + 1));
+         }
+         return success;
+      });
    }
 
    public CompletableFuture<Void> preloadContainers(UUID playerId, List<String> containerTypes) {
@@ -229,7 +377,11 @@ public final class ExtractionInventoryRepository {
             }
 
             if (!snapshot.isEmpty()) {
-               String insertSql = "INSERT INTO extraction_inventory_slots (player_uuid, container_type, slot_index, payload_b64, updated_at) VALUES (?, ?, ?, ?, NOW())";
+               // Two concurrent saves for the same container interleave their DELETE+INSERT phases
+               // (autocommit batches), which threw duplicate-key on (player_uuid, container_type,
+               // slot_index). Upsert makes the insert idempotent; last writer wins per slot.
+               String insertSql = "INSERT INTO extraction_inventory_slots (player_uuid, container_type, slot_index, payload_b64, updated_at) VALUES (?, ?, ?, ?, NOW()) "
+                  + "ON CONFLICT (player_uuid, container_type, slot_index) DO UPDATE SET payload_b64 = EXCLUDED.payload_b64, updated_at = NOW()";
                try (PreparedStatement insert = connection.prepareStatement(insertSql)) {
                   for (Map.Entry<Integer, String> entry : snapshot.entrySet()) {
                      insert.setObject(1, playerId);

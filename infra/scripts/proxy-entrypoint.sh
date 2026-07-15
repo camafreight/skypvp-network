@@ -74,6 +74,13 @@ if [ -f /data/runtime/velocity.toml ]; then
   sed -i '/^[[:space:]]*minigame-1[[:space:]]*=.*/d' /data/runtime/velocity.toml || true
   sed -i '/"minigames\.example\.com"[[:space:]]*=.*/d' /data/runtime/velocity.toml || true
   sed -i '/"factions\.example\.com"[[:space:]]*=.*/d' /data/runtime/velocity.toml || true
+  if [ "${SPVP_VELOCITY_ONLINE_MODE:-true}" = "false" ]; then
+    sed -i 's|^online-mode = .*|online-mode = false|' /data/runtime/velocity.toml || true
+    sed -i 's|^force-key-authentication = .*|force-key-authentication = false|' /data/runtime/velocity.toml || true
+  else
+    sed -i 's|^online-mode = .*|online-mode = true|' /data/runtime/velocity.toml || true
+    sed -i 's|^force-key-authentication = .*|force-key-authentication = true|' /data/runtime/velocity.toml || true
+  fi
 fi
 
 rm -f /data/runtime/plugins/skypvp-proxy-core.jar || true

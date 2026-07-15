@@ -41,7 +41,8 @@ chunk-loading-advanced:
 chunk-loading-basic:
   player-max-chunk-generate-rate: -1.0
   player-max-chunk-load-rate: 100.0
-  player-max-chunk-send-rate: 75.0
+  # Pair with view-distance=6 — shorter queue under strip sends when crossing chunk seams.
+  player-max-chunk-send-rate: 100.0
 chunk-system:
   io-threads: -1
   worker-threads: -1

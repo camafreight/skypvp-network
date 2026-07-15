@@ -38,7 +38,6 @@ Origin_12:
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 98
     Projectiles_Per_Shot: 10
     Delay_Between_Shots: 7

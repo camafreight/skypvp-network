@@ -15,25 +15,77 @@ settings:
   # Folia pods default this to 0 unless set explicitly. Paper pods benefit from 1 standby world per template.
   extract-dwell-seconds: 5
   combat-tag-seconds: 15
+  # Cap on how much a single heal (Stim/potion/item) restores. The raid pool is 40 HP but heals are balanced like
+  # vanilla, so a "heal 20" adds 20 instead of scaling up to fill the whole bar. Set <= 0 to disable the cap.
+  max-heal-per-event: 20
+  # How long a disconnected raider's slot + stand-in body are held before auto-elimination (corpse + spectator slot).
+  disconnected-grace-minutes: 5
   default-map: aether-ruins
   auto-discover-chests: false
   default-loot-tier: defaultChests
   extract-closing-soon-seconds: 300
-  extract-zone-particles-enabled: false
-  extract-zone-fake-beacon-enabled: true
+  extract-force-close-seconds: 300
+  extract-zone-min-open-seconds: 180
+  # Random "anchor" zones per raid that stay open until the global force close,
+  # so a raid can never have every extract closed while still joinable.
+  extract-zone-min-open-count: 2
+  extract-zone-warning-seconds: [60, 30, 10, 5, 4, 3, 2, 1]
+  toxicity-damage-amount: 4.0
+  toxicity-max-phase-seconds: 180
+  extract-zone-particles-enabled: true
+  # Custom ItemDisplay beam (skypvp:extract_beacon_beam) — rotating crossed planes, vanilla beacon_beam texture.
+  extract-zone-beam-enabled: true
+  # Cap on pillar height (blocks). Beam starts at zone floor and climbs toward world max.
+  extract-zone-beam-height-blocks: 256
+  # World-space cross-section width (model is a 4×4-unit span at scale 1).
+  extract-zone-beam-thickness-blocks: 1.0
+  extract-zone-fake-beacon-enabled: false
+  extract-zone-cylinder-enabled: true
   enhanced-loot-chests: true
   place-configured-chest-blocks: true
   loot-chest-ambient-interval-ticks: 40
   loot-chest-ambient-radius: 8.0
+
+# Stamina pool tuning for live breach raiders (food bar is a proportional view).
+stamina:
+  base-max: 200.0
+  base-regen-per-second: 9.0
+  base-sprint-drain-per-second: 8.0
+  exhausted-regen-cooldown-ms: 2500
+  persist-on-reconnect: true
 
 # SkyPvP hitscan: bullet weapons resolve in one WM raycast tick (no ticking fake projectiles).
 # Grenades, rockets, melee, and other listed weapons keep normal WM projectile simulation.
 hitscan:
   enabled: true
   max-range-blocks: 120
+  # particles = vanilla CRIT tracers; laser = resource-pack ItemDisplay beam (client cosmetics)
+  tracer-mode: laser
   tracer-spacing-blocks: 3.0
   tracer-view-range-blocks: 48
   tracer-particle: CRIT
+  laser:
+    # Traveling bolt visuals (hitscan damage is still instant).
+    # Lifespan (seconds) = travelDistance / velocity-blocks-per-second
+    # Max timeout uses max-range-blocks the same way WeaponMechanics documents projectile lifespan.
+    lifetime-ticks: 4
+    # Slow enough to read mid-flight (~32 b/s ≈ 1.25s over 40 blocks). Damage stays hitscan-instant.
+    velocity-blocks-per-second: 32
+    bolt-length-blocks: 3.0
+    # Length follows the shot (capped). Tip is approximated in eye-space (server cannot read FP item matrices):
+    #   tip ≈ eye + look*forward + right*right + up*up
+    # Derive forward from barrel tip in Blockbench: (tipZ - 8) / 16; tune right/up to match hand placement.
+    # Beam tint + spectral outline both use color (glow-color is fallback).
+    thickness: 0.25
+    max-length-blocks: 64
+    muzzle-forward-blocks: 0.55
+    muzzle-right-blocks: 0.30
+    muzzle-up-blocks: -0.18
+    view-range-blocks: 64
+    item-model: skypvp:laser_beam
+    color: "#40F0FF"
+    glowing: true
+    glow-color: "#40F0FF"
   impact:
     enabled: true
     view-range-blocks: 48
@@ -48,11 +100,6 @@ hitscan:
     queue-capacity: 2048
     max-tracer-points: 20
     async-prep: true
-  combat:
-    # Worker threads that schedule ray hits onto region threads (0 = schedule directly from shoot event).
-    dispatch-threads: 4
-    queue-capacity: 4096
-    defer-ticks: 0
   simulated-projectile-weapons:
     - Combat_Knife
     - Stim
@@ -99,58 +146,48 @@ loot-chest-fx:
     particle-speed: 0.02
     glow-color: light_purple
 
-# Loot tier entries support three formats:
-#   MATERIAL:amount:chance          — vanilla items (e.g. DIAMOND:2:0.85)
-#   wm|weapon_title|amount|chance  — WeaponMechanics weapon (requires WM plugin)
-#   codec|amount|chance|payload    — ItemStackCodec base64 from ItemStackCodec.encode()
-# YAML map form is also supported:
-#   - type: wm
-#     weapon: Assault_Rifle
-#     amount: 1
-#     chance: 0.35
-#   - type: codec
-#     payload: "<base64>"
-#     amount: 1
-#     chance: 0.5
+# Loot tier entries:
+#   custom|item_spec|amount|chance  — extraction custom items (materials, medic, modules, blueprints)
+#   wm|weapon_title|amount|chance     — WeaponMechanics weapons
+#   blueprint|recipe_id|amount|chance — blueprint receipt loot
 loot-tiers:
   defaultChests:
     - wm|Combat_Knife|1|0.55
     - wm|357_Magnum|1|0.15
     - wm|Flashbang|1|0.2
-    - STONE_SWORD:1:0.85
-    - WOODEN_AXE:1:0.55
-    - COOKED_BEEF:4:0.75
-    - BREAD:6:0.7
-    - ARROW:8:0.5
-    - LEATHER_BOOTS:1:0.35
-    - LEATHER_CHESTPLATE:1:0.3
-    - STICK:4:0.4
+    - custom|material:cloth_scrap|4|0.85
+    - custom|material:fiber_bundle|2|0.55
+    - custom|material:metal_shards|2|0.45
+    - custom|medic:bandage_rag|2|0.75
+    - custom|material:field_suture|1|0.35
   common:
     - wm|Uzi|1|0.35
     - wm|357_Magnum|1|0.3
     - wm|Combat_Knife|1|0.5
     - wm|Grenade|1|0.22
     - wm|Stim|1|0.4
-    - IRON_SWORD:1:0.65
-    - BREAD:8:0.85
-    - COOKED_PORKCHOP:6:0.7
-    - ARROW:16:0.75
-    - IRON_HELMET:1:0.4
-    - IRON_LEGGINGS:1:0.35
-    - SHIELD:1:0.25
+    - custom|material:polymer_sheet|2|0.55
+    - custom|material:alloy_plate|1|0.40
+    - custom|medic:sterile_bandage|2|0.65
+    - custom|material:stim_compound|1|0.35
+    - blueprint|module_sprinter|1|0.08
+    - blueprint|medic_medkit|1|0.06
+    - custom|flight_recorder|1|0.12
   rare:
     - wm|AK_47|1|0.28
     - wm|M4A1|1|0.25
+    - wm|Laser_Carbine|1|0.18
     - wm|Origin_12|1|0.22
     - wm|Kar98k|1|0.18
     - wm|50_GS|1|0.2
     - wm|Semtex|1|0.15
     - wm|Stim|2|0.45
-    - DIAMOND:2:0.85
-    - GOLDEN_APPLE:2:0.65
-    - IRON_CHESTPLATE:1:0.5
-    - IRON_BOOTS:1:0.45
-    - ENCHANTED_GOLDEN_APPLE:1:0.12
+    - custom|material:capacitor_cell|2|0.55
+    - custom|material:aether_resin|1|0.35
+    - custom|medic:medkit|1|0.50
+    - custom|module:duelist|1|0.12
+    - custom|module:flex_weave|1|0.07
+    - blueprint|recharger_tactical|1|0.05
   epic:
     - wm|AX_50|1|0.22
     - wm|RPG_7|1|0.15
@@ -158,8 +195,10 @@ loot-tiers:
     - wm|FN_FAL|1|0.2
     - wm|Airstrike|1|0.08
     - wm|Cluster_Grenade|2|0.25
-    - DIAMOND_SWORD:1:0.55
-    - DIAMOND_CHESTPLATE:1:0.35
-    - NETHERITE_INGOT:1:0.12
-    - TOTEM_OF_UNDYING:1:0.1
-    - ENCHANTED_GOLDEN_APPLE:2:0.18
+    - custom|material:quantum_gel|1|0.30
+    - custom|medic:surgical_kit|1|0.35
+    - custom|medic:overdrive_serum|1|0.15
+    - custom|recharger:military|1|0.10
+    - custom|module:overdrive|1|0.05
+    - blueprint|shield_repair_kit|1|0.03
+    - blueprint|recharger_military|1|0.04

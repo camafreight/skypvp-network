@@ -74,6 +74,42 @@ public final class BreachWorldPool {
         return Optional.ofNullable(playerIndex.get(playerId));
     }
 
+    /** True when the player is in the extraction hub and not already seated in a breach instance. */
+    public boolean isLobbyDeployable(org.bukkit.entity.Player player) {
+        if (player == null || !player.isOnline()) {
+            return false;
+        }
+        return !player.getWorld().getName().startsWith("breach_")
+                && findByPlayer(player.getUniqueId()).isEmpty();
+    }
+
+    /**
+     * Finds an active breach instance where the given party already has live raiders. When {@code mapId} is set the
+     * instance map must match; otherwise any map hosting the party is returned.
+     */
+    public Optional<BreachInstance> findActiveInstanceForParty(UUID partyId, String mapId) {
+        if (partyId == null) {
+            return Optional.empty();
+        }
+        String normalizedMap = mapId == null || mapId.isBlank() ? null : mapId.trim().toLowerCase();
+        BreachInstance fallback = null;
+        for (BreachInstance instance : instances.values()) {
+            if (!instance.hasActivePartyMember(partyId)) {
+                continue;
+            }
+            if (normalizedMap != null) {
+                if (instance.mapMeta().mapId().equalsIgnoreCase(normalizedMap)) {
+                    return Optional.of(instance);
+                }
+                continue;
+            }
+            if (fallback == null) {
+                fallback = instance;
+            }
+        }
+        return Optional.ofNullable(fallback);
+    }
+
     public Optional<BreachInstance> findByWorld(World world) {
         if (world == null) {
             return Optional.empty();
@@ -87,9 +123,10 @@ public final class BreachWorldPool {
         }
     }
 
-    void untrackParticipant(UUID playerId) {
-        if (playerId != null) {
-            playerIndex.remove(playerId);
+    /** Removes the index entry only while it still points at {@code instance}. */
+    void untrackParticipant(UUID playerId, BreachInstance instance) {
+        if (playerId != null && instance != null) {
+            playerIndex.remove(playerId, instance);
         }
     }
 
@@ -166,6 +203,19 @@ public final class BreachWorldPool {
         Optional<BreachInstance> joinable = findJoinableInstance(mapId);
         if (joinable.isPresent()) {
             return CompletableFuture.completedFuture(joinable.get());
+        }
+        return acquireFreshInstance(mapId);
+    }
+
+    /**
+     * Always provisions a brand-new instance instead of handing back an existing joinable one. The party-join
+     * retry loop uses this so a party that couldn't atomically reserve enough room in partially-filled instances
+     * is guaranteed a fresh raid to try, rather than being handed the same full instance again (which would spin
+     * forever). Concurrent requests for the same map still coalesce onto one pending world creation.
+     */
+    public CompletableFuture<BreachInstance> acquireFreshInstance(String mapId) {
+        if (mapId == null || mapId.isBlank()) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("mapId is required"));
         }
         if (instances.size() >= configService.maxBreachesPerPod()) {
             return CompletableFuture.failedFuture(new IllegalStateException("All breach instances are in use."));
@@ -304,6 +354,21 @@ public final class BreachWorldPool {
             gameplayCoordinator.onWorldReady(world, meta);
         }
         instance.activateMap();
+        if (gameplayCoordinator != null) {
+            // Warm BEFORE handing the instance to matchmaking: loot force-activation and
+            // initial mob spawns must land before any player is admitted. Standby instances
+            // always warmed; fresh /breach play instances skipped this entirely and dropped
+            // players into empty maps. The warming flag blocks canAcceptPlayers meanwhile
+            // (the instance must already be registered so its warmed mobs bind as agents).
+            instance.markWarming(true);
+            gameplayCoordinator.warmStandbyInstance(world, meta, templateId, () -> {
+                instance.markWarming(false);
+                refreshJoinableIndex(instance);
+                logger.info("[Breach] Instance '" + instanceId + "' warmed and open for players.");
+                future.complete(instance);
+            });
+            return;
+        }
         future.complete(instance);
     }
 }

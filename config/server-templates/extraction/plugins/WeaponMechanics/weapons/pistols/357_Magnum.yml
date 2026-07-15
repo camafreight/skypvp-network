@@ -37,7 +37,6 @@
       Circumstance:
         Swimming: "DENY"
         Sprinting: "DENY"
-        Dual_Wielding: "DENY"
     Projectile_Speed: 112
     Delay_Between_Shots: 9
     Spread:

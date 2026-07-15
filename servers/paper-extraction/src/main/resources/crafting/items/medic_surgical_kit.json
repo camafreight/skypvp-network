@@ -1,0 +1,1 @@
+{"typeId":"extraction:medic_surgical_kit","displayName":"Surgical Kit","coinCost":250,"stats":{"stackSize":8,"healAmount":40.0,"healChunkAmount":10.0,"healChunkIntervalTicks":4,"consumeSeconds":1.2,"useCooldownMillis":10000}}

@@ -1,0 +1,105 @@
+{
+	"credit": "SkyPvP raid backpack tier 4 — voxel pack worn on the back; 64x atlas (body/flap/pocket/straps)",
+	"texture_size": [64, 64],
+	"textures": {
+		"0": "skypvp:item/backpack_t4",
+		"particle": "skypvp:item/backpack_t4"
+	},
+	"elements": [
+		{
+			"name": "body",
+			"from": [3, 1, 5],
+			"to": [13, 13, 11],
+			"faces": {
+				"north": {"uv": [0, 0, 8, 6], "texture": "#0"},
+				"south": {"uv": [0, 0, 8, 6], "texture": "#0"},
+				"east":  {"uv": [0, 0, 4, 6], "texture": "#0"},
+				"west":  {"uv": [0, 0, 4, 6], "texture": "#0"},
+				"up":    {"uv": [0, 0, 8, 4], "texture": "#0"},
+				"down":  {"uv": [0, 0, 8, 4], "texture": "#0"}
+			}
+		},
+		{
+			"name": "flap",
+			"from": [2.5, 8, 4.6],
+			"to": [13.5, 13.6, 11.4],
+			"faces": {
+				"north": {"uv": [0, 6, 8, 10], "texture": "#0"},
+				"south": {"uv": [0, 6, 8, 10], "texture": "#0"},
+				"east":  {"uv": [0, 6, 4, 10], "texture": "#0"},
+				"west":  {"uv": [0, 6, 4, 10], "texture": "#0"},
+				"up":    {"uv": [0, 6, 8, 10], "texture": "#0"},
+				"down":  {"uv": [0, 6, 8, 10], "texture": "#0"}
+			}
+		},
+		{
+			"name": "pocket",
+			"from": [5, 2, 3.8],
+			"to": [11, 7, 5.2],
+			"faces": {
+				"north": {"uv": [0, 10, 5, 13], "texture": "#0"},
+				"south": {"uv": [0, 10, 5, 13], "texture": "#0"},
+				"east":  {"uv": [0, 10, 1, 13], "texture": "#0"},
+				"west":  {"uv": [0, 10, 1, 13], "texture": "#0"},
+				"up":    {"uv": [0, 10, 5, 11], "texture": "#0"},
+				"down":  {"uv": [0, 10, 5, 11], "texture": "#0"}
+			}
+		},
+		{
+			"name": "strap_left",
+			"from": [4, 1, 11],
+			"to": [6, 13, 12],
+			"faces": {
+				"north": {"uv": [8, 6, 9, 12], "texture": "#0"},
+				"south": {"uv": [8, 6, 9, 12], "texture": "#0"},
+				"east":  {"uv": [8, 6, 9, 12], "texture": "#0"},
+				"west":  {"uv": [8, 6, 9, 12], "texture": "#0"},
+				"up":    {"uv": [8, 6, 9, 7], "texture": "#0"},
+				"down":  {"uv": [8, 6, 9, 7], "texture": "#0"}
+			}
+		},
+		{
+			"name": "strap_right",
+			"from": [10, 1, 11],
+			"to": [12, 13, 12],
+			"faces": {
+				"north": {"uv": [8, 6, 9, 12], "texture": "#0"},
+				"south": {"uv": [8, 6, 9, 12], "texture": "#0"},
+				"east":  {"uv": [8, 6, 9, 12], "texture": "#0"},
+				"west":  {"uv": [8, 6, 9, 12], "texture": "#0"},
+				"up":    {"uv": [8, 6, 9, 7], "texture": "#0"},
+				"down":  {"uv": [8, 6, 9, 7], "texture": "#0"}
+			}
+		}
+	],
+	"display": {
+		"gui": {
+			"rotation": [30, 225, 0],
+			"translation": [0, -0.5, 0],
+			"scale": [0.72, 0.72, 0.72]
+		},
+		"ground": {
+			"translation": [0, 2, 0],
+			"scale": [0.5, 0.5, 0.5]
+		},
+		"fixed": {
+			"scale": [1, 1, 1]
+		},
+		"thirdperson_righthand": {
+			"rotation": [0, 0, 0],
+			"translation": [-6, 2, -4.5],
+			"scale": [0.62, 0.62, 0.62]
+		},
+		"thirdperson_lefthand": {
+			"rotation": [0, 0, 0],
+			"translation": [-6, 2, -4.5],
+			"scale": [0.62, 0.62, 0.62]
+		},
+		"firstperson_righthand": {
+			"scale": [0, 0, 0]
+		},
+		"firstperson_lefthand": {
+			"scale": [0, 0, 0]
+		}
+	}
+}

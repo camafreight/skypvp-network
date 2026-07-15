@@ -1,0 +1,12 @@
+{
+  "listings": [
+    {"id": "vanguard_common", "displayName": "Vanguard Kit (Common)", "description": "Balanced frontline four-piece set.", "icon": "NETHERITE_CHESTPLATE", "coinCost": 400, "goldCost": 0, "armorSet": "vanguard", "rarity": "common"},
+    {"id": "vanguard_uncommon", "displayName": "Vanguard Kit (Uncommon)", "description": "Reinforced Vanguard plating.", "icon": "NETHERITE_CHESTPLATE", "coinCost": 900, "goldCost": 3, "armorSet": "vanguard", "rarity": "uncommon"},
+    {"id": "striker_common", "displayName": "Striker Kit (Common)", "description": "Light rig for fast repositioning.", "icon": "NETHERITE_BOOTS", "coinCost": 450, "goldCost": 0, "armorSet": "striker", "rarity": "common"},
+    {"id": "striker_uncommon", "displayName": "Striker Kit (Uncommon)", "description": "Upgraded Striker mobility shell.", "icon": "NETHERITE_BOOTS", "coinCost": 950, "goldCost": 3, "armorSet": "striker", "rarity": "uncommon"},
+    {"id": "medic_common", "displayName": "Medic Kit (Common)", "description": "Field-support armor bundle.", "icon": "NETHERITE_LEGGINGS", "coinCost": 500, "goldCost": 0, "armorSet": "medic", "rarity": "common"},
+    {"id": "medic_uncommon", "displayName": "Medic Kit (Uncommon)", "description": "Enhanced recovery plating.", "icon": "NETHERITE_LEGGINGS", "coinCost": 1000, "goldCost": 4, "armorSet": "medic", "rarity": "uncommon"},
+    {"id": "phantom_common", "displayName": "Phantom Kit (Common)", "description": "Endurance-focused sleek rig.", "icon": "NETHERITE_HELMET", "coinCost": 480, "goldCost": 0, "armorSet": "phantom", "rarity": "common"},
+    {"id": "phantom_uncommon", "displayName": "Phantom Kit (Uncommon)", "description": "Refined Phantom endurance kit.", "icon": "NETHERITE_HELMET", "coinCost": 980, "goldCost": 4, "armorSet": "phantom", "rarity": "uncommon"}
+  ]
+}

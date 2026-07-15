@@ -50,3 +50,19 @@ chat:
       name: "%player_name%"
       suffix: ""
       chat_color: white
+
+# Network resource pack is owned by Velocity (self-host on the public proxy LoadBalancer).
+# Paper backends should leave this disabled to avoid ClusterIP download failures / limbo kick loops.
+resource-pack:
+  enabled: false
+  force: false
+  url: ""
+  sha1: ""
+  uuid: "a7c3e9f1-5b2d-4e8a-9c1f-0d6b4a8e2f35"
+  prompt: "<gold>SkyPvP</gold> <gray>requires its resource pack for weapons, lasers, and effects."
+  kick-message: "<red>You must accept the SkyPvP resource pack to play."
+  serve-locally: false
+  serve-port: 8765
+  public-host: ""
+  local-file: "skypvp-core.zip"
+  apply-timeout-seconds: 45

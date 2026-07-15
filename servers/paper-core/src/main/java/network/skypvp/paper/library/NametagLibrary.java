@@ -12,7 +12,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.chat.ChatPlaceholderBridge;
 import network.skypvp.paper.library.packet.PacketGlowTeams;
@@ -57,7 +56,6 @@ import org.joml.Vector3f;
  */
 public final class NametagLibrary implements Listener {
 
-   private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
    private static final Pattern GRADIENT = Pattern.compile("<gradient:([^>]+)>");
    private static final int TEXT_DISPLAY_LINE_WIDTH = 4096;
 
@@ -149,14 +147,39 @@ public final class NametagLibrary implements Listener {
    /**
     * Re-applies the per-viewer hide-vanilla-name teams for a viewer whose client scoreboard was just replaced
     * (switching scoreboards wipes packet teams client-side). Mirrors {@code NpcLibrary.resyncViewer}.
+    *
+    * <p>Also required after {@code hidePlayer}/{@code showPlayer}: the client drops team membership when an
+    * entity is despawned/respawned, but the server packet-team cache still thinks hide is applied and skips
+    * re-send — which surfaces the vanilla nametag (notably after death/rejoin in extraction).
     */
    public void resyncViewer(Player viewer) {
-      if (viewer == null || !this.shouldHideVanillaNames()) {
+      if (viewer == null || !viewer.isOnline() || !this.shouldHideVanillaNames()) {
          return;
       }
       for (Player target : this.plugin.getServer().getOnlinePlayers()) {
+         if (target == null || !target.isOnline()) {
+            continue;
+         }
          PacketGlowTeams.removePacketEntityTeam(this.plugin, viewer, target.getName());
          PacketGlowTeams.applyPacketEntityTeam(this.plugin, viewer, target.getName(), false, null, true);
+      }
+   }
+
+   /**
+    * Forces every online viewer to re-hide {@code target}'s vanilla nametag. Use after the target was
+    * re-shown via {@code showPlayer} (reconnect, spectator exit, tab-visibility reconcile).
+    */
+   public void resyncTarget(Player target) {
+      if (target == null || !target.isOnline() || !this.shouldHideVanillaNames()) {
+         return;
+      }
+      String name = target.getName();
+      for (Player viewer : this.plugin.getServer().getOnlinePlayers()) {
+         if (viewer == null || !viewer.isOnline()) {
+            continue;
+         }
+         PacketGlowTeams.removePacketEntityTeam(this.plugin, viewer, name);
+         PacketGlowTeams.applyPacketEntityTeam(this.plugin, viewer, name, false, null, true);
       }
    }
 
@@ -192,7 +215,7 @@ public final class NametagLibrary implements Listener {
    private void restartRefreshTask() {
       int period = Math.max(1, this.definition.refreshTicks);
       if (this.hasAnimations()) {
-         period = Math.min(2, period);
+         period = Math.min(4, period);
       }
       if (this.refreshTask != null && period == this.refreshPeriodTicks) {
          return;
@@ -305,6 +328,8 @@ public final class NametagLibrary implements Listener {
          display.setPersistent(false);
          display.setSeeThrough(true);
          display.setShadowed(false);
+         display.setGravity(false);
+         display.setInvulnerable(true);
          display.setLineWidth(TEXT_DISPLAY_LINE_WIDTH);
          display.setDefaultBackground(false);
          display.setBackgroundColor(def.background ? Color.fromARGB(64, 0, 0, 0) : Color.fromARGB(0, 0, 0, 0));
@@ -321,6 +346,8 @@ public final class NametagLibrary implements Listener {
          display.setItemDisplayTransform(ItemDisplayTransform.FIXED);
          display.setBillboard(Billboard.CENTER);
          display.setPersistent(false);
+         display.setGravity(false);
+         display.setInvulnerable(true);
          display.setTransformation(this.lineTransformation(line.itemScale * def.scale, offsetY));
          this.applyGlowOutline(display, line);
          display.getPersistentDataContainer().set(this.nametagOwnerKey, PersistentDataType.STRING, player.getUniqueId().toString());
@@ -420,7 +447,7 @@ public final class NametagLibrary implements Listener {
       text = ChatPlaceholderBridge.apply(player, text);
       text = this.applyTextAnimation(line.animation, text, tick);
       try {
-         return MINI_MESSAGE.deserialize(text);
+         return ServerTextUtil.miniMessageComponent(text);
       } catch (Exception exception) {
          return ServerTextUtil.component(stripTags(text));
       }
@@ -585,19 +612,35 @@ public final class NametagLibrary implements Listener {
    public void onPlayerJoin(PlayerJoinEvent event) {
       Player player = event.getPlayer();
       if (this.shouldHideVanillaNames()) {
-         // New player both sees everyone else's hidden names and gets hidden for existing viewers.
-         this.applyVanillaHideFor(player);
-         for (Player viewer : this.plugin.getServer().getOnlinePlayers()) {
-            PacketGlowTeams.applyPacketEntityTeam(this.plugin, viewer, player.getName(), false, null, true);
-         }
+         // Force remove+apply: a prior session may have left a matching cache signature, which would
+         // skip the hide packet while the new client entity has no team membership yet.
+         this.resyncViewer(player);
+         this.resyncTarget(player);
       }
-      this.plugin.platform().runOnPlayerLater(player, () -> this.remount(player), 5L);
+      this.plugin.platform().runOnPlayerLater(player, () -> {
+         if (this.shouldHideVanillaNames()) {
+            this.resyncViewer(player);
+            this.resyncTarget(player);
+         }
+         this.remount(player);
+      }, 5L);
    }
 
    @EventHandler
    public void onPlayerQuit(PlayerQuitEvent event) {
-      this.unmount(event.getPlayer());
-      this.hiddenPlayers.remove(event.getPlayer().getUniqueId());
+      Player leaving = event.getPlayer();
+      this.unmount(leaving);
+      this.hiddenPlayers.remove(leaving.getUniqueId());
+      // Client drops team membership on disconnect; clear server cache so the next join re-sends hide.
+      if (this.shouldHideVanillaNames()) {
+         String name = leaving.getName();
+         for (Player viewer : this.plugin.getServer().getOnlinePlayers()) {
+            if (viewer == null || viewer.getUniqueId().equals(leaving.getUniqueId())) {
+               continue;
+            }
+            PacketGlowTeams.removePacketEntityTeam(this.plugin, viewer, name);
+         }
+      }
    }
 
    @EventHandler(priority = EventPriority.MONITOR)
@@ -609,7 +652,14 @@ public final class NametagLibrary implements Listener {
    @EventHandler(priority = EventPriority.MONITOR)
    public void onPlayerRespawn(PlayerRespawnEvent event) {
       Player player = event.getPlayer();
-      this.plugin.platform().runOnPlayerLater(player, () -> this.remount(player), 2L);
+      this.plugin.platform().runOnPlayerLater(player, () -> {
+         if (this.shouldHideVanillaNames()) {
+            // Respawn recreates the client player entity; re-bind hide teams for this target.
+            this.resyncTarget(player);
+            this.resyncViewer(player);
+         }
+         this.remount(player);
+      }, 2L);
    }
 
    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -657,22 +707,18 @@ public final class NametagLibrary implements Listener {
 
       ParsedLine(String rawText) {
          String text = rawText == null ? "" : rawText;
+         text = ServerTextUtil.stripAnimationMarkup(text);
          TextAnimation parsedAnimation = TextAnimation.NONE;
-         if (text.contains("<anim:glow>")) {
+         if (rawText != null && rawText.contains("<anim:glow>")) {
             parsedAnimation = TextAnimation.GLOW;
-            text = text.replace("<anim:glow>", "");
-         } else if (text.contains("<anim:rainbow>")) {
+         } else if (rawText != null && rawText.contains("<anim:rainbow>")) {
             parsedAnimation = TextAnimation.RAINBOW;
-            text = text.replace("<anim:rainbow>", "");
-         } else if (text.contains("<anim:blink>")) {
+         } else if (rawText != null && rawText.contains("<anim:blink>")) {
             parsedAnimation = TextAnimation.BLINK;
-            text = text.replace("<anim:blink>", "");
-         } else if (text.contains("<anim:scroll>")) {
+         } else if (rawText != null && rawText.contains("<anim:scroll>")) {
             parsedAnimation = TextAnimation.SCROLL;
-            text = text.replace("<anim:scroll>", "");
-         } else if (text.contains("<anim:typewriter>")) {
+         } else if (rawText != null && rawText.contains("<anim:typewriter>")) {
             parsedAnimation = TextAnimation.TYPEWRITER;
-            text = text.replace("<anim:typewriter>", "");
          }
          this.animation = parsedAnimation;
 
@@ -703,7 +749,7 @@ public final class NametagLibrary implements Listener {
          this.itemMaterial = parsedItem;
          this.itemScale = parsedItemScale <= 0.0F ? 0.5F : parsedItemScale;
 
-         this.baseText = text;
+         this.baseText = network.skypvp.shared.ServerTextUtil.applySmallCapsTags(text);
          String plain = stripTags(text).trim();
          this.isEmpty = parsedItem == null && (plain.isEmpty() || text.equalsIgnoreCase("<empty>"));
       }

@@ -1,0 +1,11 @@
+{
+  "typeId": "extraction:module_fortress",
+  "displayName": "Fortress Overclock",
+  "moduleEffects": [
+    {"label": "15% Defense", "positive": true},
+    {"label": "30% Knockback Resistance", "positive": true},
+    {"label": "10% Movement Speed", "positive": false},
+    {"label": "10% Attack Speed", "positive": false}
+  ],
+  "loreLines": ["<aqua>Chestplate overclock"]
+}

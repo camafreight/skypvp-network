@@ -42,6 +42,9 @@ public final class VanillaAdvancementDisableListener implements Listener {
 
    @EventHandler
    public void onServerLoad(ServerLoadEvent event) {
+      if (event.getType() != ServerLoadEvent.LoadType.STARTUP) {
+         return;
+      }
       this.plugin.platformScheduler().runForEachPlayer(VanillaAdvancementDisableListener::revokeVanillaAdvancements);
    }
 

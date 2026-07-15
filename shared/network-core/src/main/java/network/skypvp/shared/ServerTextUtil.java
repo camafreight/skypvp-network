@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.StringJoiner;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -38,11 +39,28 @@ public final class ServerTextUtil {
     /** Vanilla action bar line width at GUI scale 1 with the default font. */
     public static final int ACTION_BAR_LINE_WIDTH_PIXELS = 320;
     /** Vanilla sidebar line width at GUI scale 1 with the default font. */
+    public static final int TAB_LINE_WIDTH_PIXELS = 360;
     public static final int SCOREBOARD_LINE_WIDTH_PIXELS = 142;
+    /**
+     * Vanilla multiplayer server-list MOTD drawable width at GUI scale 1 (pixels).
+     * <p>
+     * Empirically ~265px: Spigot developers measured 53 hyphen ({@code -}) characters fitting one MOTD line
+     * ({@linkplain <a href="https://www.spigotmc.org/threads/max-characters-in-motd-and-chat-line.317332/">Spigot thread</a>},
+     * each hyphen is 5px in the default font → 265px). This is <em>not</em> the 320px chat line width.
+     * <p>
+     * For plain ASCII, ~45 visible characters per line is the safe community limit (formatting codes excluded).
+     * The wiki notes MOTD strings over 59 characters may cause ping communication errors — that is a protocol
+     * limit, separate from this drawable pixel slot.
+     *
+     * @see #MOTD_LINE_WIDTH_CHARS
+     */
+    public static final int MOTD_LINE_WIDTH_PIXELS = 265;
+    /** Safe visible-character budget per MOTD line for plain-text helpers (formatting codes excluded). */
+    public static final int MOTD_LINE_WIDTH_CHARS = 45;
     public static final int MIN_FRAME_WIDTH = 45;
     public static final int MAX_FRAME_WIDTH = 64;
     public static final int DEFAULT_FRAME_WIDTH = 48;
-    private static final int SPACE_PIXEL_WIDTH = 4;
+    public static final int SPACE_PIXEL_WIDTH = 4;
 
     private static final MiniMessage MINI = MiniMessage.miniMessage();
 
@@ -127,28 +145,98 @@ public final class ServerTextUtil {
     private static final String SUCCESS = "&a";
     private static final TextColor FIELD_VALUE_COLOR = TextColor.fromHexString(ThemeTone.BRAND_400.hex());
     private static final Map<Character, String> SMALL_CAPS_MAP = new HashMap<>();
+    private static final Pattern SMALL_CAPS_TAG = Pattern.compile("(?is)(?<!\\\\)<smallcaps>(.*?)</smallcaps>");
 
-    private ServerTextUtil() {
+    static {
         String normal = "abcdefghijklmnopqrstuvwxyz";
         // Matching small caps Unicode characters
-        String[] smallCaps = { "ᴀ", "ʙ", "ᴄ", "ᴅ", "ᴇ", "ꜰ", "ɢ", "ʜ", "ɪ", "ᴊ", "ᴋ", "ʟ", "ᴍ", "ɴ", "ᴏ", "ᴘ", "ǫ", "ʀ",
-                "ꜱ", "ᴛ", "ᴜ", "ᴠ", "ᴡ", "x", "ʏ", "ᴢ" };
-
+        String[] smallCaps = {
+                "ᴀ", "ʙ", "ᴄ", "ᴅ", "ᴇ", "ꜰ", "ɢ", "ʜ", "ɪ", "ᴊ", "ᴋ", "ʟ", "ᴍ", "ɴ", "ᴏ", "ᴘ", "ǫ", "ʀ",
+                "ꜱ", "ᴛ", "ᴜ", "ᴠ", "ᴡ", "x", "ʏ", "ᴢ"
+        };
         for (int i = 0; i < normal.length(); i++) {
             SMALL_CAPS_MAP.put(normal.charAt(i), smallCaps[i]);
         }
     }
 
-    public static String toSmallCaps(String input) {
-        if (input == null)
-            return null;
-        StringBuilder builder = new StringBuilder();
+    private ServerTextUtil() {
+    }
 
+    public static String toSmallCaps(String input) {
+        if (input == null) {
+            return null;
+        }
+        StringBuilder builder = new StringBuilder(input.length());
         // Convert to lowercase first so all targeted letters get mapped
-        for (char c : input.toLowerCase().toCharArray()) {
+        for (char c : input.toLowerCase(Locale.ROOT).toCharArray()) {
             builder.append(SMALL_CAPS_MAP.getOrDefault(c, String.valueOf(c)));
         }
         return builder.toString();
+    }
+
+    /**
+     * Strips custom {@code <anim:...>} / {@code </anim:...>} markup that is not real MiniMessage.
+     * Closing tags used to leak into GUI lore as literal {@code </anim:glow>} text.
+     */
+    public static String stripAnimationMarkup(String input) {
+        if (input == null || input.isEmpty()) {
+            return input == null ? "" : input;
+        }
+        return input
+                .replaceAll("(?i)</?anim(?::[a-z0-9_-]+)?>", "")
+                .replaceAll("(?i)</anim>", "");
+    }
+
+    /**
+     * Expands {@code <smallcaps>...</smallcaps>} regions to Unicode small-caps letters.
+     * Nested MiniMessage tags inside the region are preserved; only plain text is converted.
+     * Close with {@code </smallcaps>}. Escape a literal open tag with {@code \<smallcaps>}.
+     */
+    public static String applySmallCapsTags(String input) {
+        if (input == null || input.isEmpty()) {
+            return input == null ? "" : input;
+        }
+        String lower = input.toLowerCase(Locale.ROOT);
+        if (!lower.contains("<smallcaps>") && !lower.contains("\\<smallcaps>")) {
+            return input;
+        }
+        Matcher matcher = SMALL_CAPS_TAG.matcher(input);
+        StringBuilder out = new StringBuilder(input.length());
+        while (matcher.find()) {
+            matcher.appendReplacement(out, Matcher.quoteReplacement(toSmallCapsPreservingTags(matcher.group(1))));
+        }
+        matcher.appendTail(out);
+        // Keep \<smallcaps> escapes so MiniMessage can render them as literal tags.
+        return out.toString();
+    }
+
+    /** Converts letters to small-caps while leaving {@code <...>} tag bodies untouched. */
+    public static String toSmallCapsPreservingTags(String input) {
+        if (input == null || input.isEmpty()) {
+            return input == null ? "" : input;
+        }
+        StringBuilder out = new StringBuilder(input.length());
+        int i = 0;
+        while (i < input.length()) {
+            char c = input.charAt(i);
+            if (c == '<') {
+                int end = input.indexOf('>', i);
+                if (end < 0) {
+                    out.append(toSmallCaps(input.substring(i)));
+                    break;
+                }
+                out.append(input, i, end + 1);
+                i = end + 1;
+            } else {
+                int next = input.indexOf('<', i);
+                if (next < 0) {
+                    next = input.length();
+                }
+                out.append(toSmallCaps(input.substring(i, next)));
+                i = next;
+            }
+        }
+        return out.toString();
     }
 
     /**
@@ -349,7 +437,8 @@ public final class ServerTextUtil {
     }
 
     public static Component miniMessageComponent(String miniMessageText, ThemeTone defaultTone) {
-        String normalized = normalizeMiniMessageMultiline(miniMessageText, defaultTone);
+        String withSmallCaps = applySmallCapsTags(safeString(miniMessageText));
+        String normalized = normalizeMiniMessageMultiline(withSmallCaps, defaultTone);
         return MINI.deserialize(normalized);
     }
 
@@ -390,6 +479,72 @@ public final class ServerTextUtil {
 
     public static Component centerMiniMessageLine(String miniMessageText) {
         return centerMiniMessageLine(miniMessageText, SCOREBOARD_LINE_WIDTH_PIXELS);
+    }
+
+    /**
+     * Centers a MiniMessage line for the multiplayer server-list MOTD using pixel-aware
+     * measurement (bold, unicode, and gradients included). The client left-aligns MOTD rows,
+     * so only <em>leading</em> space padding is applied — trailing spaces would not shift text.
+     */
+    public static Component centerMotdMiniMessageLine(String miniMessageText) {
+        return centerMotdMiniMessageLine(miniMessageText, MOTD_LINE_WIDTH_PIXELS);
+    }
+
+    public static Component centerMotdMiniMessageLine(String miniMessageText, int lineWidthPixels) {
+        return centerMotdLine(miniMessageComponent(miniMessageText), lineWidthPixels);
+    }
+
+    /**
+     * Centers a rendered component for the server-list MOTD. When the content is wider
+     * than the drawable slot it is returned unchanged — callers should compact copy first.
+     */
+    public static Component centerMotdLine(Component component) {
+        return centerMotdLine(component, MOTD_LINE_WIDTH_PIXELS);
+    }
+
+    public static Component centerMotdLine(Component component, int lineWidthPixels) {
+        Objects.requireNonNull(component, "component");
+        int safeWidth = Math.max(SPACE_PIXEL_WIDTH, lineWidthPixels);
+        int textWidth = componentVisibleWidth(component);
+        if (textWidth <= 0) {
+            return component;
+        }
+        if (textWidth > safeWidth) {
+            return component;
+        }
+        return centerComponent(component, safeWidth);
+    }
+
+    /** Returns {@code true} when a MiniMessage MOTD fragment fits the drawable server-list slot. */
+    public static boolean fitsMotdLine(String miniMessageText) {
+        return motdMiniMessageWidth(miniMessageText) <= MOTD_LINE_WIDTH_PIXELS;
+    }
+
+    /** Returns the measured pixel width of a MiniMessage MOTD fragment. */
+    public static int motdMiniMessageWidth(String miniMessageText) {
+        if (miniMessageText == null || miniMessageText.isBlank()) {
+            return 0;
+        }
+        return componentVisibleWidth(miniMessageComponent(miniMessageText));
+    }
+
+    /**
+     * Centers plain MOTD text with ASCII space padding for legacy / config snippets.
+     * For formatted MOTD output prefer {@link #centerMotdMiniMessageLine(String)}.
+     */
+    public static String centerPlainMotdText(String plainText) {
+        return centerPlainMotdText(plainText, MOTD_LINE_WIDTH_CHARS);
+    }
+
+    public static String centerPlainMotdText(String plainText, int lineWidthChars) {
+        String safe = plainText == null ? "" : plainText;
+        int width = Math.max(1, lineWidthChars);
+        int visible = safe.length();
+        if (visible >= width) {
+            return safe;
+        }
+        int pad = (width - visible) / 2;
+        return " ".repeat(Math.max(0, pad)) + safe;
     }
 
     /**
@@ -436,6 +591,169 @@ public final class ServerTextUtil {
             line = line.append(spacesForPixels(Math.max(0, rightStart - cursor))).append(safeRight);
         }
         return line;
+    }
+
+    /** Horizontal alignment of content inside a fixed-width column. */
+    public enum HAlign {
+        LEFT,
+        CENTER,
+        RIGHT
+    }
+
+    /**
+     * Lays out three sections into fixed-width columns so that a section changing width — or emptying entirely, e.g.
+     * the weapon/ammo readout when the player holsters — never shifts the other sections. The {@code left} column is
+     * flush-left, the {@code center} column is centered inside its own fixed {@code centerZoneWidthPixels} region, and
+     * the {@code right} column is right-aligned to the end of the line. The whole line is always padded to
+     * {@code totalWidthPixels}, so the client (which horizontally centers the action bar) positions it identically
+     * every frame regardless of which sections currently have content.
+     *
+     * <p>The right column occupies the remainder ({@code total - left - center}) and is allowed to grow leftward if
+     * its content is wider than that remainder; only the left and center columns are hard-pinned.</p>
+     */
+    public static Component layoutFixedZones(
+            Component left,
+            Component center,
+            Component right,
+            int totalWidthPixels,
+            int leftZoneWidthPixels,
+            int centerZoneWidthPixels
+    ) {
+        Component safeLeft = left == null ? Component.empty() : left;
+        Component safeCenter = center == null ? Component.empty() : center;
+        Component safeRight = right == null ? Component.empty() : right;
+
+        int leftWidth = componentVisibleWidth(safeLeft);
+        int centerWidth = componentVisibleWidth(safeCenter);
+        int rightWidth = componentVisibleWidth(safeRight);
+        if (leftWidth + centerWidth + rightWidth == 0) {
+            return Component.empty();
+        }
+
+        int total = Math.max(SPACE_PIXEL_WIDTH, totalWidthPixels);
+        int leftZone = Math.max(0, leftZoneWidthPixels);
+        int centerZone = Math.max(0, centerZoneWidthPixels);
+
+        int[] cursor = {0};
+        Component line = Component.empty();
+
+        if (leftWidth > 0) {
+            line = line.append(safeLeft);
+            cursor[0] += leftWidth;
+        }
+        if (centerWidth > 0) {
+            int centerStart = leftZone + Math.max(0, (centerZone - centerWidth) / 2);
+            line = appendGap(line, cursor, centerStart);
+            line = line.append(safeCenter);
+            cursor[0] += centerWidth;
+        }
+        if (rightWidth > 0) {
+            int rightStart = Math.max(cursor[0], total - rightWidth);
+            line = appendGap(line, cursor, rightStart);
+            line = line.append(safeRight);
+            cursor[0] += rightWidth;
+        }
+        // Trailing pad keeps the rendered line a constant width so nothing shifts when a column is empty.
+        line = appendGap(line, cursor, total);
+        return line;
+    }
+
+    /** Appends spaces to advance {@code cursor} toward {@code targetPixels}; updates {@code cursor} by what was added. */
+    private static Component appendGap(Component line, int[] cursor, int targetPixels) {
+        int gap = targetPixels - cursor[0];
+        int spaces = Math.max(0, gap / SPACE_PIXEL_WIDTH);
+        if (spaces <= 0) {
+            return line;
+        }
+        cursor[0] += spaces * SPACE_PIXEL_WIDTH;
+        return line.append(Component.text(" ".repeat(spaces)));
+    }
+
+    /**
+     * Pads {@code content} with spaces so it occupies a fixed pixel width, aligned {@code left}, {@code center}, or
+     * {@code right}. Used to give HUD sub-fields (progress bars, percentages, flashing "SHIELD DOWN") a constant
+     * footprint so neighbouring text never jitters as their values change.
+     */
+    public static Component padToWidth(Component content, int targetWidthPixels, HAlign align) {
+        Component safe = content == null ? Component.empty() : content;
+        int contentWidth = componentVisibleWidth(safe);
+        int spaces = Math.max(0, (targetWidthPixels - contentWidth) / SPACE_PIXEL_WIDTH);
+        if (spaces <= 0) {
+            return safe;
+        }
+        return switch (align == null ? HAlign.LEFT : align) {
+            case LEFT -> safe.append(Component.text(" ".repeat(spaces)));
+            case RIGHT -> Component.text(" ".repeat(spaces)).append(safe);
+            case CENTER -> {
+                int leftSpaces = spaces / 2;
+                int rightSpaces = spaces - leftSpaces;
+                Component padded = Component.text(" ".repeat(leftSpaces)).append(safe);
+                yield rightSpaces > 0 ? padded.append(Component.text(" ".repeat(rightSpaces))) : padded;
+            }
+        };
+    }
+
+    /**
+     * Cuts {@code component} so its rendered width never exceeds {@code maxWidthPixels}, preserving
+     * per-segment styles. Content past the budget is dropped without an ellipsis — fixed-width HUD
+     * columns (tab board) prefer a clean cut over a suffix that eats column space.
+     */
+    public static Component truncateComponentToWidth(Component component, int maxWidthPixels) {
+        if (component == null || maxWidthPixels <= 0) {
+            return Component.empty();
+        }
+        if (componentVisibleWidth(component) <= maxWidthPixels) {
+            return component;
+        }
+        int[] budget = {maxWidthPixels};
+        Component truncated = truncateNode(component, Style.empty(), budget);
+        return truncated == null ? Component.empty() : truncated;
+    }
+
+    private static Component truncateNode(Component node, Style inheritedStyle, int[] budgetPixels) {
+        if (budgetPixels[0] <= 0) {
+            return null;
+        }
+        Style merged = inheritedStyle.merge(node.style(), Style.Merge.Strategy.IF_ABSENT_ON_TARGET);
+        Component base;
+        if (node instanceof TextComponent textComponent) {
+            boolean bold = merged.decoration(TextDecoration.BOLD) == TextDecoration.State.TRUE;
+            String content = textComponent.content();
+            StringBuilder kept = new StringBuilder(content.length());
+            for (int index = 0; index < content.length(); ) {
+                int codePoint = content.codePointAt(index);
+                int advance = minecraftCodePointWidth(codePoint, bold);
+                if (advance > budgetPixels[0]) {
+                    budgetPixels[0] = 0;
+                    break;
+                }
+                budgetPixels[0] -= advance;
+                kept.appendCodePoint(codePoint);
+                index += Character.charCount(codePoint);
+            }
+            base = Component.text(kept.toString()).style(node.style());
+        } else {
+            // Non-text nodes (translatable, keybind, ...) are opaque: keep whole or drop.
+            int[] selfWidth = new int[1];
+            measureComponentWidth(node.children(List.of()), inheritedStyle, selfWidth);
+            if (selfWidth[0] > budgetPixels[0]) {
+                budgetPixels[0] = 0;
+                return null;
+            }
+            budgetPixels[0] -= selfWidth[0];
+            base = node.children(List.of());
+        }
+        List<Component> keptChildren = new ArrayList<>();
+        for (Component child : node.children()) {
+            if (budgetPixels[0] <= 0) {
+                break;
+            }
+            Component truncatedChild = truncateNode(child, merged, budgetPixels);
+            if (truncatedChild != null) {
+                keptChildren.add(truncatedChild);
+            }
+        }
+        return keptChildren.isEmpty() ? base : base.children(keptChildren);
     }
 
     private static Component padLeadingSpaces(Component component, int paddingPixels) {
@@ -556,6 +874,22 @@ public final class ServerTextUtil {
     public static Component partyInviteSentMessage(String targetName) {
         String displayName = escapeMiniMessageText(sanitizeCommandUsername(targetName));
         return miniMessageComponent("<green>Party request sent to <white>" + displayName + "<green>.");
+    }
+
+    /** Network-wide friend presence: a friend joined the proxy. */
+    public static Component friendNetworkJoinMessage(String username) {
+        String displayName = escapeMiniMessageText(sanitizeCommandUsername(username));
+        return miniMessageComponent(
+                "<gray>[<aqua>Friends</aqua>]</gray> <green>" + displayName + "</green> <gray>joined the network.</gray>"
+        );
+    }
+
+    /** Network-wide friend presence: a friend left the proxy. */
+    public static Component friendNetworkLeaveMessage(String username) {
+        String displayName = escapeMiniMessageText(sanitizeCommandUsername(username));
+        return miniMessageComponent(
+                "<gray>[<aqua>Friends</aqua>]</gray> <red>" + displayName + "</red> <gray>left the network.</gray>"
+        );
     }
 
     public static String legacyToMiniMessage(String legacyText) {
@@ -1024,20 +1358,56 @@ public final class ServerTextUtil {
     }
 
     private static int minecraftCodePointWidth(int codePoint, boolean bold) {
-        int width;
-        if (codePoint <= 127) {
-            width = minecraftCharWidth((char) codePoint);
-        } else if (codePoint >= 0x1D00 && codePoint <= 0x1D7F) {
-            width = 5;
-        } else if (codePoint >= 0x1F300) {
-            width = 10;
-        } else {
-            width = 5;
+        int width = motdSymbolWidth(codePoint);
+        if (width < 0) {
+            if (codePoint <= 127) {
+                width = minecraftCharWidth((char) codePoint);
+            } else if (codePoint >= 0x1D00 && codePoint <= 0x1D7F) {
+                width = 5;
+            } else if (codePoint >= 0x2580 && codePoint <= 0x259F) {
+                width = blockElementWidth(codePoint);
+            } else if (codePoint >= 0x1F300) {
+                width = 10;
+            } else {
+                width = 6;
+            }
         }
         if (bold && codePoint != ' ') {
             width++;
         }
         return width;
+    }
+
+    /** Fixed widths for symbols commonly used in server-list MOTDs (unifont / default font). */
+    private static int motdSymbolWidth(int codePoint) {
+        return switch (codePoint) {
+            case 0x2726, 0x2727, 0x2605, 0x273F -> 6; // ✦ ✧ ★ ✿
+            case 0x2022, 0x00B7 -> 2; // • ·
+            case 0x2013, 0x2014 -> 6; // – —
+            case 0x00BB, 0x00AB -> 5; // » «
+            case 0x26A0 -> 6; // ⚠
+            default -> -1;
+        };
+    }
+
+    /**
+     * Pixel advance for the Unicode Block Elements (U+2580–U+259F). The full/half/shade blocks ship in Minecraft's
+     * default bitmap font (measured widths); the eighth blocks (▉▊▋▍▎▏) are not, so the client renders them from the
+     * unifont fallback — their widths here are the proportional 8px-cell estimate, which is what the vitals bars use.
+     */
+    private static int blockElementWidth(int codePoint) {
+        return switch (codePoint) {
+            case 0x2588, 0x2580, 0x2584, 0x2592, 0x2593 -> 8; // █ ▀ ▄ ▒ ▓
+            case 0x2591 -> 7;                                 // ░ light shade
+            case 0x2589 -> 7;                                 // ▉ 7/8
+            case 0x258A -> 6;                                 // ▊ 3/4
+            case 0x258B -> 5;                                 // ▋ 5/8  (progress-bar glyph)
+            case 0x258C, 0x2590 -> 4;                         // ▌ ▐ half block
+            case 0x258D -> 4;                                 // ▍ 3/8
+            case 0x258E -> 2;                                 // ▎ 1/4
+            case 0x258F -> 1;                                 // ▏ 1/8
+            default -> 6;
+        };
     }
 
     private static int minecraftCharWidth(char character) {

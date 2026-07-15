@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_bulwark",
+  "displayName": "Bulwark Module",
+  "moduleEffects": [
+    {"label": "8% Defense", "positive": true},
+    {"label": "6% Movement Speed", "positive": false}
+  ]
+}

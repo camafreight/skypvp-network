@@ -142,6 +142,10 @@ public final class GuiTextLibrary {
          return this;
       }
 
+      public GuiTextLibrary.LoreBuilder raw(String miniMessageLine) {
+         return this.method_243(miniMessageLine);
+      }
+
       public GuiTextLibrary.LoreBuilder section(String title) {
          return this.section("#FFFFFF", title);
       }

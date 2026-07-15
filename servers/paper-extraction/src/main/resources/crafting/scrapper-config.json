@@ -1,0 +1,24 @@
+{
+  "tiers": [
+    {
+      "tier": 1,
+      "name": "Salvage Sifter",
+      "sessionCap": 48,
+      "materials": ["cloth_scrap", "metal_shards", "fiber_bundle"]
+    },
+    {
+      "tier": 2,
+      "name": "Field Recycler",
+      "sessionCap": 72,
+      "materials": ["cloth_scrap", "metal_shards", "fiber_bundle", "polymer_sheet"],
+      "upgradeMaterials": [{"id": "alloy_plate", "amount": 3}]
+    },
+    {
+      "tier": 3,
+      "name": "Combat Harvester",
+      "sessionCap": 96,
+      "materials": ["metal_shards", "polymer_sheet", "capacitor_cell", "stim_compound"],
+      "upgradeMaterials": [{"id": "alloy_plate", "amount": 6}, {"id": "aether_resin", "amount": 2}]
+    }
+  ]
+}

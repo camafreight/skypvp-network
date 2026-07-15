@@ -68,6 +68,42 @@ public final class BreachConfigService {
         return Math.max(1, breachConfig.getInt("settings.min-players", 2));
     }
 
+    /**
+     * Maximum health a single heal event (Stim / potion / item) may restore to a raider. The raid pool is 40 but
+     * heals are balanced around vanilla-sized restores, so a "heal 20" must add 20 rather than scale up and top the
+     * whole bar. {@code <= 0} disables the cap.
+     */
+    public double maxHealPerEvent() {
+        return breachConfig.getDouble("settings.max-heal-per-event", 20.0D);
+    }
+
+    /** How long a disconnected raider's slot and stand-in body are held before auto-elimination. Minimum one minute. */
+    public long disconnectedGraceMillis() {
+        int minutes = Math.max(1, breachConfig.getInt("settings.disconnected-grace-minutes",
+                breachConfig.getInt("settings.away-grace-minutes", 5)));
+        return minutes * 60_000L;
+    }
+
+    public double staminaBaseMax() {
+        return Math.max(25.0D, breachConfig.getDouble("stamina.base-max", 200.0D));
+    }
+
+    public double staminaBaseRegenPerSecond() {
+        return Math.max(1.0D, breachConfig.getDouble("stamina.base-regen-per-second", 9.0D));
+    }
+
+    public double staminaBaseSprintDrainPerSecond() {
+        return Math.max(3.0D, breachConfig.getDouble("stamina.base-sprint-drain-per-second", 8.0D));
+    }
+
+    public long staminaExhaustedRegenCooldownMillis() {
+        return Math.max(500L, breachConfig.getLong("stamina.exhausted-regen-cooldown-ms", 2_500L));
+    }
+
+    public boolean staminaPersistOnReconnect() {
+        return breachConfig.getBoolean("stamina.persist-on-reconnect", true);
+    }
+
     public int startingCountdownSeconds() {
         return joiningCountdownSeconds();
     }
@@ -141,12 +177,68 @@ public final class BreachConfigService {
         return Math.max(30, breachConfig.getInt("settings.extract-closing-soon-seconds", 300));
     }
 
+    public int extractForceCloseSeconds() {
+        return Math.max(30, breachConfig.getInt("settings.extract-force-close-seconds", extractClosingSoonSeconds()));
+    }
+
+    public int extractZoneMinOpenSeconds() {
+        return Math.max(0, breachConfig.getInt("settings.extract-zone-min-open-seconds", 180));
+    }
+
+    /** Anchor zones per raid that stay usable until the global force close (never all-closed early). */
+    public int extractZoneMinOpenCount() {
+        return Math.max(0, breachConfig.getInt("settings.extract-zone-min-open-count", 2));
+    }
+
+    public List<Integer> extractZoneWarningSeconds() {
+        List<Integer> configured = breachConfig.getIntegerList("settings.extract-zone-warning-seconds");
+        if (configured == null || configured.isEmpty()) {
+            return List.of(60, 30, 10, 5, 4, 3, 2, 1);
+        }
+        List<Integer> thresholds = new ArrayList<>();
+        for (Integer value : configured) {
+            if (value != null && value > 0) {
+                thresholds.add(value);
+            }
+        }
+        return thresholds.isEmpty() ? List.of(60, 30, 10, 5, 4, 3, 2, 1) : List.copyOf(thresholds);
+    }
+
+    public double toxicityDamageAmount() {
+        return Math.max(0.5D, breachConfig.getDouble("settings.toxicity-damage-amount", 4.0D));
+    }
+
+    public int toxicityMaxPhaseSeconds() {
+        return Math.max(30, breachConfig.getInt("settings.toxicity-max-phase-seconds", 180));
+    }
+
     public boolean extractZoneParticlesEnabled() {
         return breachConfig.getBoolean("settings.extract-zone-particles-enabled", true);
     }
 
+    /**
+     * Optional client-only beacon/iron/glass overlays. Custom ItemDisplay beam is preferred
+     * ({@link #extractZoneBeamEnabled()}).
+     */
     public boolean extractZoneFakeBeaconEnabled() {
-        return breachConfig.getBoolean("settings.extract-zone-fake-beacon-enabled", true);
+        return breachConfig.getBoolean("settings.extract-zone-fake-beacon-enabled", false);
+    }
+
+    /** Tall rotating ItemDisplay beam ({@code skypvp:extract_beacon_beam}). */
+    public boolean extractZoneBeamEnabled() {
+        if (breachConfig.contains("settings.extract-zone-beam-enabled")) {
+            return breachConfig.getBoolean("settings.extract-zone-beam-enabled");
+        }
+        // Backward compat with the short cylinder pad flag.
+        return breachConfig.getBoolean("settings.extract-zone-cylinder-enabled", true);
+    }
+
+    public double extractZoneBeamHeightBlocks() {
+        return Math.max(8.0D, breachConfig.getDouble("settings.extract-zone-beam-height-blocks", 256.0D));
+    }
+
+    public double extractZoneBeamThicknessBlocks() {
+        return Math.max(0.35D, breachConfig.getDouble("settings.extract-zone-beam-thickness-blocks", 1.0D));
     }
 
     public int combatTagSeconds() {
@@ -162,6 +254,7 @@ public final class BreachConfigService {
                     defaults.tracerSpacingBlocks(),
                     defaults.tracerViewRangeBlocks(),
                     defaults.tracerParticle(),
+                    defaults.tracerMode(),
                     defaults.impactEffectsEnabled(),
                     defaults.impactViewRangeBlocks(),
                     defaults.impactBlockParticleCount(),
@@ -174,9 +267,18 @@ public final class BreachConfigService {
                     defaults.visualQueueCapacity(),
                     defaults.maxTracerPoints(),
                     defaults.asyncVisualPrep(),
-                    defaults.combatDispatchThreads(),
-                    defaults.combatQueueCapacity(),
-                    defaults.combatDeferTicks(),
+                    defaults.laserLifetimeTicks(),
+                    defaults.laserVelocityBlocksPerSecond(),
+                    defaults.laserBoltLengthBlocks(),
+                    defaults.laserThickness(),
+                    defaults.laserViewRangeBlocks(),
+                    defaults.laserMaxLengthBlocks(),
+                    defaults.laserMuzzleForwardBlocks(),
+                    defaults.laserMuzzleRightBlocks(),
+                    defaults.laserMuzzleUpBlocks(),
+                    defaults.laserItemModel(),
+                    defaults.laserGlowing(),
+                    defaults.laserGlowColor(),
                     defaults.simulatedProjectileWeapons()
             );
         }
@@ -194,6 +296,10 @@ public final class BreachConfigService {
                 HitscanSettings.parseParticle(
                         breachConfig.getString("hitscan.tracer-particle"),
                         defaults.tracerParticle()
+                ),
+                HitscanSettings.TracerMode.parse(
+                        breachConfig.getString("hitscan.tracer-mode"),
+                        defaults.tracerMode()
                 ),
                 breachConfig.getBoolean("hitscan.impact.enabled", defaults.impactEffectsEnabled()),
                 Math.max(8.0, breachConfig.getDouble("hitscan.impact.view-range-blocks", defaults.impactViewRangeBlocks())),
@@ -213,9 +319,33 @@ public final class BreachConfigService {
                 Math.max(64, breachConfig.getInt("hitscan.visuals.queue-capacity", defaults.visualQueueCapacity())),
                 Math.max(1, breachConfig.getInt("hitscan.visuals.max-tracer-points", defaults.maxTracerPoints())),
                 breachConfig.getBoolean("hitscan.visuals.async-prep", defaults.asyncVisualPrep()),
-                Math.max(0, breachConfig.getInt("hitscan.combat.dispatch-threads", defaults.combatDispatchThreads())),
-                Math.max(64, breachConfig.getInt("hitscan.combat.queue-capacity", defaults.combatQueueCapacity())),
-                Math.max(0L, breachConfig.getLong("hitscan.combat.defer-ticks", defaults.combatDeferTicks())),
+                Math.max(0L, breachConfig.getLong("hitscan.laser.lifetime-ticks", defaults.laserLifetimeTicks())),
+                Math.max(1.0, breachConfig.getDouble(
+                        "hitscan.laser.velocity-blocks-per-second",
+                        defaults.laserVelocityBlocksPerSecond()
+                )),
+                Math.max(0.35, breachConfig.getDouble(
+                        "hitscan.laser.bolt-length-blocks",
+                        defaults.laserBoltLengthBlocks()
+                )),
+                Math.max(0.02, breachConfig.getDouble("hitscan.laser.thickness", defaults.laserThickness())),
+                Math.max(8.0, breachConfig.getDouble("hitscan.laser.view-range-blocks", defaults.laserViewRangeBlocks())),
+                Math.max(0.5, breachConfig.getDouble("hitscan.laser.max-length-blocks", defaults.laserMaxLengthBlocks())),
+                Math.max(0.0, breachConfig.getDouble(
+                        "hitscan.laser.muzzle-forward-blocks",
+                        breachConfig.getDouble("hitscan.laser.muzzle-offset-blocks", defaults.laserMuzzleForwardBlocks())
+                )),
+                breachConfig.getDouble("hitscan.laser.muzzle-right-blocks", defaults.laserMuzzleRightBlocks()),
+                breachConfig.getDouble("hitscan.laser.muzzle-up-blocks", defaults.laserMuzzleUpBlocks()),
+                breachConfig.getString("hitscan.laser.item-model", defaults.laserItemModel()),
+                breachConfig.getBoolean("hitscan.laser.glowing", defaults.laserGlowing()),
+                HitscanSettings.parseColor(
+                        firstNonBlank(
+                                breachConfig.getString("hitscan.laser.color"),
+                                breachConfig.getString("hitscan.laser.glow-color")
+                        ),
+                        defaults.laserGlowColor()
+                ),
                 simulatedWeapons
         );
     }
@@ -232,21 +362,21 @@ public final class BreachConfigService {
         if (tiersSection == null) {
             lootTiers.put("common", List.of(
                     new BreachLootEntry.WeaponMechanicsEntry("Uzi", 1, 0.35),
-                    new BreachLootEntry.MaterialEntry(Material.IRON_SWORD, 1, 0.65),
-                    new BreachLootEntry.MaterialEntry(Material.BREAD, 8, 0.85),
-                    new BreachLootEntry.MaterialEntry(Material.ARROW, 16, 0.75)
+                    new BreachLootEntry.CustomItemEntry("medic:bandage_rag", 2, 0.65),
+                    new BreachLootEntry.CustomItemEntry("material:cloth_scrap", 4, 0.85),
+                    new BreachLootEntry.CustomItemEntry("material:metal_shards", 2, 0.75)
             ));
             lootTiers.put("rare", List.of(
                     new BreachLootEntry.WeaponMechanicsEntry("AK_47", 1, 0.28),
-                    new BreachLootEntry.MaterialEntry(Material.DIAMOND, 2, 0.85),
-                    new BreachLootEntry.MaterialEntry(Material.GOLDEN_APPLE, 2, 0.65),
-                    new BreachLootEntry.MaterialEntry(Material.IRON_CHESTPLATE, 1, 0.5)
+                    new BreachLootEntry.CustomItemEntry("material:polymer_sheet", 2, 0.65),
+                    new BreachLootEntry.CustomItemEntry("medic:medkit", 1, 0.5),
+                    new BreachLootEntry.CustomItemEntry("material:capacitor_cell", 1, 0.45)
             ));
             lootTiers.put("defaultchests", List.of(
                     new BreachLootEntry.WeaponMechanicsEntry("Combat_Knife", 1, 0.55),
-                    new BreachLootEntry.MaterialEntry(Material.STONE_SWORD, 1, 0.85),
-                    new BreachLootEntry.MaterialEntry(Material.COOKED_BEEF, 4, 0.75),
-                    new BreachLootEntry.MaterialEntry(Material.ARROW, 8, 0.5)
+                    new BreachLootEntry.CustomItemEntry("material:cloth_scrap", 3, 0.85),
+                    new BreachLootEntry.CustomItemEntry("medic:bandage_rag", 2, 0.75),
+                    new BreachLootEntry.CustomItemEntry("material:fiber_bundle", 2, 0.5)
             ));
             return;
         }
@@ -284,6 +414,12 @@ public final class BreachConfigService {
         }
         String trimmed = raw.trim();
         String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("blueprint|")) {
+            return parseBlueprintPipeEntry(trimmed.substring("blueprint|".length()));
+        }
+        if (lower.startsWith("custom|")) {
+            return parseCustomPipeEntry(trimmed.substring("custom|".length()));
+        }
         if (lower.startsWith("codec|")) {
             return parseCodecPipeEntry(trimmed.substring("codec|".length()));
         }
@@ -307,6 +443,29 @@ public final class BreachConfigService {
         double chance = parseConfigDouble(map.get("chance"), 1.0);
 
         return switch (type.trim().toLowerCase(Locale.ROOT)) {
+            case "blueprint", "blueprint-receipt", "blueprint_receipt" -> {
+                String blueprintId = firstNonBlank(
+                        stringValue(map.get("blueprint")),
+                        stringValue(map.get("blueprint-id")),
+                        stringValue(map.get("recipe"))
+                );
+                if (blueprintId == null) {
+                    yield null;
+                }
+                yield new BreachLootEntry.BlueprintReceiptEntry(blueprintId.trim(), clampAmount(amount), clampChance(chance));
+            }
+            case "custom", "customitem", "custom-item", "item" -> {
+                String itemSpec = firstNonBlank(
+                        stringValue(map.get("item")),
+                        stringValue(map.get("custom")),
+                        stringValue(map.get("custom-item")),
+                        stringValue(map.get("type-id"))
+                );
+                if (itemSpec == null) {
+                    yield null;
+                }
+                yield new BreachLootEntry.CustomItemEntry(itemSpec.trim(), clampAmount(amount), clampChance(chance));
+            }
             case "codec", "itemstack", "itemstackcodec" -> {
                 String payload = firstNonBlank(
                         stringValue(map.get("payload")),
@@ -346,6 +505,36 @@ public final class BreachConfigService {
                 yield new BreachLootEntry.MaterialEntry(material, clampAmount(amount), clampChance(chance));
             }
         };
+    }
+
+    private static BreachLootEntry parseBlueprintPipeEntry(String rest) {
+        int lastSeparator = rest.lastIndexOf('|');
+        int middleSeparator = rest.lastIndexOf('|', lastSeparator - 1);
+        if (middleSeparator <= 0 || lastSeparator <= middleSeparator + 1) {
+            return null;
+        }
+        String blueprintId = rest.substring(0, middleSeparator).trim();
+        if (blueprintId.isBlank()) {
+            return null;
+        }
+        int amount = parseConfigInt(rest.substring(middleSeparator + 1, lastSeparator), 1);
+        double chance = parseConfigDouble(rest.substring(lastSeparator + 1), 1.0);
+        return new BreachLootEntry.BlueprintReceiptEntry(blueprintId, clampAmount(amount), clampChance(chance));
+    }
+
+    private static BreachLootEntry parseCustomPipeEntry(String rest) {
+        int lastSeparator = rest.lastIndexOf('|');
+        int middleSeparator = rest.lastIndexOf('|', lastSeparator - 1);
+        if (middleSeparator <= 0 || lastSeparator <= middleSeparator + 1) {
+            return null;
+        }
+        String itemSpec = rest.substring(0, middleSeparator).trim();
+        if (itemSpec.isBlank()) {
+            return null;
+        }
+        int amount = parseConfigInt(rest.substring(middleSeparator + 1, lastSeparator), 1);
+        double chance = parseConfigDouble(rest.substring(lastSeparator + 1), 1.0);
+        return new BreachLootEntry.CustomItemEntry(itemSpec, clampAmount(amount), clampChance(chance));
     }
 
     private static BreachLootEntry parseCodecPipeEntry(String rest) {

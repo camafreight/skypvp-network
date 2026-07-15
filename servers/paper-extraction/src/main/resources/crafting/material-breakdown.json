@@ -1,0 +1,57 @@
+{
+  "defaultEfficiency": 0.7,
+  "recipes": [
+    {
+      "input": "fiber_bundle",
+      "inputAmount": 1,
+      "outputs": [{"id": "cloth_scrap", "amount": 3}],
+      "note": "Unbundle processed fiber into scrap cloth"
+    },
+    {
+      "input": "polymer_sheet",
+      "inputAmount": 1,
+      "outputs": [
+        {"id": "fiber_bundle", "amount": 2},
+        {"id": "cloth_scrap", "amount": 2}
+      ]
+    },
+    {
+      "input": "alloy_plate",
+      "inputAmount": 1,
+      "outputs": [{"id": "metal_shards", "amount": 6}]
+    },
+    {
+      "input": "capacitor_cell",
+      "inputAmount": 1,
+      "outputs": [
+        {"id": "metal_shards", "amount": 3},
+        {"id": "polymer_sheet", "amount": 1}
+      ]
+    },
+    {
+      "input": "stim_compound",
+      "inputAmount": 1,
+      "outputs": [
+        {"id": "field_suture", "amount": 1},
+        {"id": "fiber_bundle", "amount": 1},
+        {"id": "cloth_scrap", "amount": 2}
+      ]
+    },
+    {
+      "input": "aether_resin",
+      "inputAmount": 1,
+      "outputs": [
+        {"id": "stim_compound", "amount": 2},
+        {"id": "polymer_sheet", "amount": 1}
+      ]
+    },
+    {
+      "input": "quantum_gel",
+      "inputAmount": 1,
+      "outputs": [
+        {"id": "aether_resin", "amount": 2},
+        {"id": "capacitor_cell", "amount": 1}
+      ]
+    }
+  ]
+}

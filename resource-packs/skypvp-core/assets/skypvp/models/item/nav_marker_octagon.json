@@ -1,0 +1,19 @@
+{
+	"credit": "SkyPvP navigator marker: flat dye-tinted octagon plate, 1 block at scale 1. Billboarded by the WaypointNavigatorService ItemDisplay; grayscale texture carries a bright rim + darker center, tintindex 0 takes the dye color from the navigator API.",
+	"textures": {
+		"particle": "skypvp:item/nav_marker_octagon",
+		"plate": "skypvp:item/nav_marker_octagon"
+	},
+	"elements": [
+		{
+			"from": [0, 0, 7.75],
+			"to": [16, 16, 8.25],
+			"shade": false,
+			"light_emission": 15,
+			"faces": {
+				"north": {"uv": [16, 0, 0, 16], "texture": "#plate", "tintindex": 0},
+				"south": {"uv": [0, 0, 16, 16], "texture": "#plate", "tintindex": 0}
+			}
+		}
+	]
+}

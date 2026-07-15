@@ -3,17 +3,22 @@ package network.skypvp.lobby.library;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import network.skypvp.lobby.LobbyModePlugin;
 import network.skypvp.paper.gui.GuiItems;
+import network.skypvp.paper.service.CoreHotbarService;
 import network.skypvp.shared.ServerTextUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -21,16 +26,14 @@ import org.bukkit.persistence.PersistentDataType;
 
 public final class HotbarItemsLibrary {
    private static final String TITLE_HEX = ServerTextUtil.ThemeTone.BRAND_400.hex();
-   private static final String SECONDARY_HEX = ServerTextUtil.ThemeTone.BRAND_600.hex();
-   private static final String LOBBY_POOL_TARGET = "lobby";
    private final LobbyModePlugin plugin;
-   private final NamespacedKey actionKey;
-   private final NamespacedKey dataKey;
+   private final CoreHotbarService hotbarService;
+   private final NamespacedKey legacyActionKey;
 
-   public HotbarItemsLibrary(LobbyModePlugin plugin) {
+   public HotbarItemsLibrary(LobbyModePlugin plugin, CoreHotbarService hotbarService) {
       this.plugin = plugin;
-      this.actionKey = new NamespacedKey(plugin, "hotbar_action");
-      this.dataKey = new NamespacedKey(plugin, "hotbar_action_data");
+      this.hotbarService = hotbarService;
+      this.legacyActionKey = new NamespacedKey(plugin, "hotbar_action");
    }
 
    public int apply(Player player, boolean clearFirst) {
@@ -39,7 +42,7 @@ public final class HotbarItemsLibrary {
          player.getInventory().setArmorContents(null);
       }
 
-      int applied = 0;
+      int applied = this.purgeStaleItems(player);
 
       for (HotbarItemsLibrary.HotbarItemDef def : this.defaults()) {
          player.getInventory().setItem(def.slot(), this.buildItem(player, def));
@@ -50,7 +53,7 @@ public final class HotbarItemsLibrary {
    }
 
    public int ensure(Player player) {
-      int fixes = 0;
+      int fixes = this.purgeStaleItems(player);
 
       for (HotbarItemsLibrary.HotbarItemDef def : this.defaults()) {
          ItemStack existing = player.getInventory().getItem(def.slot());
@@ -63,43 +66,96 @@ public final class HotbarItemsLibrary {
       return fixes;
    }
 
-   public String readAction(ItemStack item) {
-      if (item != null && item.hasItemMeta()) {
-         PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
-         return (String)pdc.get(this.actionKey, PersistentDataType.STRING);
-      } else {
-         return null;
+   public int purgeStaleItems(Player player) {
+      Set<Integer> ownedSlots = new HashSet<>();
+      Set<String> ownedActions = new HashSet<>();
+      for (HotbarItemsLibrary.HotbarItemDef def : this.defaults()) {
+         ownedSlots.add(def.slot());
+         ownedActions.add(def.action().toLowerCase(Locale.ROOT));
       }
+
+      int removed = 0;
+      PlayerInventory inventory = player.getInventory();
+
+      for (int slot = 0; slot < 9; slot++) {
+         if (ownedSlots.contains(slot)) {
+            continue;
+         }
+         if (this.clearSlotIfPresent(inventory, slot)) {
+            removed++;
+         }
+      }
+
+      for (int slot = 0; slot < inventory.getSize(); slot++) {
+         ItemStack item = inventory.getItem(slot);
+         if (item == null || item.getType().isAir()) {
+            continue;
+         }
+
+         String action = this.readAction(item);
+         boolean tagged = this.isTaggedHotbarItem(item);
+         if (!tagged && slot >= 9) {
+            continue;
+         }
+
+         if (tagged && ownedSlots.contains(slot) && action != null && ownedActions.contains(action.toLowerCase(Locale.ROOT))) {
+            continue;
+         }
+
+         if (tagged || slot < 9) {
+            inventory.setItem(slot, null);
+            removed++;
+         }
+      }
+
+      if (this.isTaggedHotbarItem(inventory.getItemInOffHand())) {
+         inventory.setItemInOffHand(null);
+         removed++;
+      }
+
+      return removed;
    }
 
-   public String readActionData(ItemStack item) {
-      if (item != null && item.hasItemMeta()) {
-         PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
-         return (String)pdc.getOrDefault(this.dataKey, PersistentDataType.STRING, "");
-      } else {
-         return "";
+   public String readAction(ItemStack item) {
+      if (item == null || !item.hasItemMeta()) {
+         return null;
       }
+      String action = this.hotbarService.readAction(item);
+      if (action != null) {
+         return action;
+      }
+      return item.getItemMeta().getPersistentDataContainer().get(this.legacyActionKey, PersistentDataType.STRING);
+   }
+
+   private boolean isTaggedHotbarItem(ItemStack item) {
+      if (item == null || !item.hasItemMeta()) {
+         return false;
+      }
+      if (this.hotbarService.isServerItem(item)) {
+         return true;
+      }
+      PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
+      return pdc.has(this.legacyActionKey, PersistentDataType.STRING);
+   }
+
+   private boolean clearSlotIfPresent(PlayerInventory inventory, int slot) {
+      ItemStack item = inventory.getItem(slot);
+      if (item == null || item.getType().isAir()) {
+         return false;
+      }
+      inventory.setItem(slot, null);
+      return true;
    }
 
    private List<HotbarItemsLibrary.HotbarItemDef> defaults() {
       List<HotbarItemsLibrary.HotbarItemDef> defs = new ArrayList<>();
       defs.add(
          new HotbarItemsLibrary.HotbarItemDef(
-            0,
-            Material.COMPASS,
-            title("Game Selector"),
-            GuiItems.standardLore(List.of("Choose your next live server or queue.", "Lobby, Survival, and Minigames in one menu."), "Click to open"),
-            "OPEN_SELECTOR",
-            ""
-         )
-      );
-      defs.add(
-         new HotbarItemsLibrary.HotbarItemDef(
             2,
             Material.PLAYER_HEAD,
             title("Lobby Minigames"),
             GuiItems.standardLore(List.of("Quickly jump into Duels,", "Knockback Tag, or Hide and Seek!"), "Click to open"),
-            "OPEN_LOBBY_MINIGAMES",
+            CoreHotbarService.ACTION_OPEN_LOBBY_MINIGAMES,
             "",
             "ewogICJ0aW1lc3RhbXAiIDogMTc3OTQ2NzMzMzA2NCwKICAicHJvZmlsZUlkIiA6ICI3ZGEyYWIzYTkzY2E0OGVlODMwNDhhZmMzYjgwZTY4ZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJHb2xkYXBmZWwiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWEyMDg3YTRkNjNhYTM0ZmEyYjJlMjk3MWJjZWNhZjVhNzYwYTkzNGFmYTQ4MjBiOTAyNTM5NTNmOGZkZjMyMiIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
          )
@@ -109,8 +165,8 @@ public final class HotbarItemsLibrary {
             4,
             Material.NETHER_STAR,
             title("Network Navigator"),
-            GuiItems.standardLore(List.of("Browse menus, destinations, and network tools.", "Start from the full SkyPvP navigator."), "Click to open"),
-            "OPEN_MENU",
+            GuiItems.standardLore(List.of("Route to lobby hubs or Aether Breach.", "One menu for all network destinations."), "Click to open"),
+            CoreHotbarService.ACTION_OPEN_NAVIGATOR,
             ""
          )
       );
@@ -120,7 +176,7 @@ public final class HotbarItemsLibrary {
             Material.BOOK,
             title("Help Center"),
             GuiItems.standardLore(List.of("Review commands, shortcuts, and utility menus."), "Click to browse"),
-            "OPEN_HELP",
+            CoreHotbarService.ACTION_OPEN_HELP,
             ""
          )
       );
@@ -130,7 +186,7 @@ public final class HotbarItemsLibrary {
             Material.PLAYER_HEAD,
             title("Your Profile"),
             GuiItems.standardLore(List.of("View your stats, coins, and progression."), "Click to view"),
-            "OPEN_PROFILE",
+            CoreHotbarService.ACTION_OPEN_PROFILE,
             ""
          )
       );
@@ -138,12 +194,11 @@ public final class HotbarItemsLibrary {
    }
 
    private boolean matchesDef(ItemStack item, HotbarItemsLibrary.HotbarItemDef def) {
-      if (item != null && item.getType() == def.material() && item.hasItemMeta()) {
-         String action = this.readAction(item);
-         return def.action().equalsIgnoreCase(action);
-      } else {
+      if (item == null || item.getType() != def.material() || !item.hasItemMeta()) {
          return false;
       }
+      String action = this.readAction(item);
+      return def.action().equalsIgnoreCase(action) && this.hotbarService.isServerItem(item);
    }
 
    private ItemStack buildItem(Player owner, HotbarItemsLibrary.HotbarItemDef def) {
@@ -163,19 +218,13 @@ public final class HotbarItemsLibrary {
 
       meta.displayName(ServerTextUtil.miniMessageComponent(def.name()));
       meta.lore(def.lore().stream().map(MiniMessage.miniMessage()::deserialize).toList());
-      PersistentDataContainer pdc = meta.getPersistentDataContainer();
-      pdc.set(this.actionKey, PersistentDataType.STRING, def.action());
-      pdc.set(this.dataKey, PersistentDataType.STRING, def.actionData());
+      this.hotbarService.tagServerHotbarItem(meta, def.action());
       item.setItemMeta(meta);
       return item;
    }
 
    private static String title(String label) {
       return "<" + TITLE_HEX + "><bold>" + label + "</bold><reset>";
-   }
-
-   private static String secondaryTitle(String label) {
-      return "<" + SECONDARY_HEX + "><bold>" + label + "</bold><reset>";
    }
 
    private static record HotbarItemDef(int slot, Material material, String name, List<String> lore, String action, String actionData, String textureValue) {

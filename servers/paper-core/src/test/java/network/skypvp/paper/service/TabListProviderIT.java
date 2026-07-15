@@ -41,7 +41,7 @@ public class TabListProviderIT {
         Mockito.when(mockBehaviorService.booleanValue(Mockito.eq("core.hud.tablist.enabled"), Mockito.anyBoolean())).thenReturn(true);
         Mockito.when(mockRankService.getCached(Mockito.any())).thenReturn(network.skypvp.shared.RankRecord.DEFAULT);
 
-        tabListService = new TabListService(mockPlugin, mockRankService);
+        tabListService = new TabListService(mockPlugin, mockRankService, null);
         client = new MockPacketClient();
     }
 

@@ -1,7 +1,7 @@
 {
   "mapId": "aether-ruins",
   "displayName": "Aether Ruins",
-  "maxPlayers": 12,
+  "maxPlayers": 75,
   "durationSeconds": 3600,
   "spawnPoints": [
     {
@@ -15,23 +15,131 @@
     },
     {
       "id": "beta",
-      "x": 115.5,
-      "y": 105.0,
-      "z": 283.0,
-      "yaw": -90.0,
+      "x": -290.5,
+      "y": 11.0,
+      "z": 466.5,
+      "yaw": -128.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "charlie",
+      "x": -193.5,
+      "y": 46.0,
+      "z": 527.5,
+      "yaw": -20.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "delta",
+      "x": -104.5,
+      "y": 47.0,
+      "z": 691.0,
+      "yaw": 160.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "echo",
+      "x": 79.5,
+      "y": 62.0,
+      "z": 726.5,
+      "yaw": -160.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "foxtrot",
+      "x": 186.5,
+      "y": 67.0,
+      "z": 719.5,
+      "yaw": 143.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "golf",
+      "x": 254.5,
+      "y": 121.0,
+      "z": 597.5,
+      "yaw": 123.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "hotel",
+      "x": 254.5,
+      "y": 121.0,
+      "z": 205.5,
+      "yaw": 71.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "india",
+      "x": 131.5,
+      "y": 62.0,
+      "z": 97.5,
+      "yaw": 50.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "juliet",
+      "x": 254.5,
+      "y": 121.0,
+      "z": 205.5,
+      "yaw": 71.0,
+      "pitch": 0.0,
+      "safetyRating": 90
+    },
+    {
+      "id": "kilo",
+      "x": -6.5,
+      "y": 73.0,
+      "z": 208.5,
+      "yaw": -68.0,
       "pitch": 0.0,
       "safetyRating": 90
     }
   ],
   "extractZones": [
     {
-      "id": "center-temple-extract",
-      "minX": 124.0,
+      "id": "right-temple-extract",
+      "minX": 127.0,
       "minY": 105.0,
-      "minZ": 270.0,
-      "maxX": 135.0,
-      "maxY": 114.0,
-      "maxZ": 281.0
+      "minZ": 266.0,
+      "maxX": 130.0,
+      "maxY": 117.0,
+      "maxZ": 285.0
+    },
+    {
+      "id": "left-temple-extract",
+      "minX": 127.0,
+      "minY": 105.0,
+      "minZ": 512.0,
+      "maxX": 130.0,
+      "maxY": 117.0,
+      "maxZ": 531.0
+    },
+    {
+      "id": "portal",
+      "minX": -126.0,
+      "minY": 18.0,
+      "minZ": 384.0,
+      "maxX": -117.0,
+      "maxY": 41.0,
+      "maxZ": 406.0
+    },
+    {
+      "id": "house-backyard",
+      "minX": -230.0,
+      "minY": 47.0,
+      "minZ": 230.0,
+      "maxX": -219.0,
+      "maxY": 55.0,
+      "maxZ": 239.0
     }
   ],
   "lootChests": [
@@ -57,15 +165,169 @@
       "tier": "epic"
     }
   ],
-  "bossSpawns": [
+  "bossSpawns": [],
+  "mobSpawns": [
     {
-      "id": "ruins-wither",
-      "mythicMobId": "RuinsWither",
-      "x": 129.5,
-      "y": 108.0,
-      "z": 275.5,
-      "delaySeconds": 900,
+      "id": "south-smg-patrol",
+      "cohortId": "south-ridge",
+      "mythicMobId": "RuinsSMGunner",
+      "x": 35.5,
+      "y": 101.0,
+      "z": 430.5,
+      "delaySeconds": 90,
+      "intervalSeconds": 240,
+      "maxAlive": 2,
       "level": 1
+    },
+    {
+      "id": "center-rifle-patrol",
+      "cohortId": "south-ridge",
+      "mythicMobId": "RuinsRifleman",
+      "x": 33.5,
+      "y": 102.0,
+      "z": 399.5,
+      "delaySeconds": 180,
+      "intervalSeconds": 300,
+      "maxAlive": 2,
+      "level": 1
+    },
+    {
+      "id": "loot-breacher",
+      "cohortId": "loot-temple",
+      "mythicMobId": "RuinsBreacher",
+      "x": 104.5,
+      "y": 105.0,
+      "z": 286.5,
+      "delaySeconds": 120,
+      "intervalSeconds": 360,
+      "maxAlive": 1,
+      "level": 1
+    },
+    {
+      "id": "loot-knife-rusher",
+      "cohortId": "loot-temple",
+      "mythicMobId": "RuinsKnifeRusher",
+      "x": 98.5,
+      "y": 105.0,
+      "z": 292.5,
+      "delaySeconds": 75,
+      "intervalSeconds": 210,
+      "maxAlive": 2,
+      "level": 1
+    },
+    {
+      "id": "east-pistol-patrol",
+      "cohortId": "south-ridge",
+      "mythicMobId": "RuinsPistolGunner",
+      "x": 18.5,
+      "y": 101.0,
+      "z": 373.5,
+      "delaySeconds": 150,
+      "intervalSeconds": 300,
+      "maxAlive": 2,
+      "level": 1
+    },
+    {
+      "id": "left-temple-smg-patrol",
+      "cohortId": "left-temple",
+      "mythicMobId": "RuinsSMGunner",
+      "x": 118.5,
+      "y": 105.0,
+      "z": 522.5,
+      "delaySeconds": 90,
+      "intervalSeconds": 240,
+      "maxAlive": 2,
+      "level": 1
+    },
+    {
+      "id": "right-temple-rifle-patrol",
+      "cohortId": "right-temple",
+      "mythicMobId": "RuinsRifleman",
+      "x": 118.5,
+      "y": 105.0,
+      "z": 275.5,
+      "delaySeconds": 90,
+      "intervalSeconds": 240,
+      "maxAlive": 2,
+      "level": 1
+    },
+    {
+      "id": "right-temple-breacher",
+      "cohortId": "right-temple",
+      "mythicMobId": "RuinsBreacher",
+      "x": 110.5,
+      "y": 105.0,
+      "z": 280.5,
+      "delaySeconds": 90,
+      "intervalSeconds": 240,
+      "maxAlive": 1,
+      "level": 1
+    },
+    {
+      "id": "right-temple-pistol-patrol",
+      "cohortId": "right-temple",
+      "mythicMobId": "RuinsPistolGunner",
+      "x": 125.5,
+      "y": 105.0,
+      "z": 270.5,
+      "delaySeconds": 150,
+      "intervalSeconds": 300,
+      "maxAlive": 2,
+      "level": 1
+    },
+    {
+      "id": "right-temple-knife-rusher",
+      "cohortId": "right-temple",
+      "mythicMobId": "RuinsKnifeRusher",
+      "x": 115.5,
+      "y": 105.0,
+      "z": 268.5,
+      "delaySeconds": 60,
+      "intervalSeconds": 180,
+      "maxAlive": 2,
+      "level": 1
+    }
+  ],
+  "materialNodes": [
+    {
+      "id": "south-scrap-heap",
+      "x": 109.5,
+      "y": 105.0,
+      "z": 281.5,
+      "materialId": "cloth_scrap",
+      "amount": 2,
+      "respawnSeconds": 45,
+      "gatherRadius": 2.5
+    },
+    {
+      "id": "spawn-metal-pile",
+      "x": 114.5,
+      "y": 105.0,
+      "z": 282.5,
+      "materialId": "metal_shards",
+      "amount": 2,
+      "respawnSeconds": 60,
+      "gatherRadius": 2.5
+    },
+    {
+      "id": "temple-fiber-cache",
+      "x": 132.5,
+      "y": 105.0,
+      "z": 277.5,
+      "materialId": "fiber_bundle",
+      "amount": 2,
+      "respawnSeconds": 75,
+      "gatherRadius": 2.5
+    },
+    {
+      "id": "temple-resin-node",
+      "x": 127.5,
+      "y": 105.0,
+      "z": 272.5,
+      "materialId": "aether_resin",
+      "amount": 1,
+      "respawnSeconds": 120,
+      "gatherRadius": 2.5
     }
   ],
   "worldGuardRegions": [

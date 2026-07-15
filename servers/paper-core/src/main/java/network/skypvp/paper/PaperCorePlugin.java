@@ -23,6 +23,7 @@ import network.skypvp.paper.command.IgnoreCommand;
 import network.skypvp.paper.command.LagCommand;
 
 import network.skypvp.paper.command.NpcCommand;
+import network.skypvp.paper.command.PlayBlocksCommand;
 import network.skypvp.paper.command.PaperStatusCommand;
 
 import network.skypvp.paper.command.NetworkInfoCommand;
@@ -40,22 +41,29 @@ import network.skypvp.paper.integration.PaperDecorationRefreshSubscriber;
 import network.skypvp.paper.integration.PaperSocialSettingsRefreshSubscriber;
 import network.skypvp.paper.integration.SkyPvPChatPlaceholderExpansion;
 import network.skypvp.paper.integration.SkyPvPPlaceholderExpansion;
+import network.skypvp.paper.integration.PaperNetworkHeartbeatSubscriber;
 import network.skypvp.paper.integration.PaperStaffChatSubscriber;
+import network.skypvp.paper.integration.NetworkHeartbeatCache;
 import network.skypvp.paper.integration.PlayerLocaleListener;
 import network.skypvp.paper.library.ItemsLibrary;
 import network.skypvp.paper.library.HolographicLibrary;
 import network.skypvp.paper.library.NametagLibrary;
 import network.skypvp.paper.library.NpcLibrary;
 import network.skypvp.paper.library.packet.PacketEventsBridge;
+import network.skypvp.paper.nms.HeadlessPlayerService;
+import network.skypvp.paper.nms.HeadlessPlayerServices;
 import network.skypvp.paper.listener.DeathMessageListener;
 import network.skypvp.paper.listener.HologramInteractListener;
 import network.skypvp.paper.listener.NpcInteractListener;
 import network.skypvp.paper.listener.AfkDetectionListener;
 import network.skypvp.paper.listener.NetworkChatListener;
 import network.skypvp.paper.listener.NetworkJoinListener;
+import network.skypvp.paper.resourcepack.ResourcePackListener;
+import network.skypvp.paper.resourcepack.ResourcePackService;
 import network.skypvp.paper.listener.PlayerQuitListener;
 import network.skypvp.paper.listener.PlayerStatsListener;
 import network.skypvp.paper.listener.VanillaAdvancementDisableListener;
+import network.skypvp.paper.listener.RecipeBookDisableListener;
 import network.skypvp.paper.listener.WorldEnvironmentListener;
 import network.skypvp.paper.model.HologramDefinition;
 import network.skypvp.paper.model.NametagDefinition;
@@ -78,15 +86,19 @@ import network.skypvp.shared.chat.TextModerationClient;
 import network.skypvp.paper.persistence.PostgresConnectionSettings;
 
 import network.skypvp.paper.integration.PaperMenuListener;
+import network.skypvp.paper.item.CustomItemEquipmentListener;
+import network.skypvp.paper.item.CustomItemServiceImpl;
+import network.skypvp.paper.item.api.CustomItemService;
 import network.skypvp.paper.listener.CoreHotbarListener;
 import network.skypvp.paper.listener.CoreHotbarLockListener;
+import network.skypvp.paper.repository.ExtractionCraftingRepository;
 import network.skypvp.paper.repository.ExtractionInventoryRepository;
+import network.skypvp.paper.repository.QuestDialogueRepository;
 import network.skypvp.paper.repository.PlayerSocialSettingsRepository;
 import network.skypvp.paper.repository.SocialGraphRepository;
 import network.skypvp.paper.repository.FriendGraphRepository;
 import network.skypvp.paper.service.CoreHotbarService;
 import network.skypvp.paper.inventory.vault.VaultDecorationTags;
-import network.skypvp.paper.inventory.vault.VaultGuiListener;
 import network.skypvp.paper.inventory.vault.VaultGuiService;
 import network.skypvp.paper.service.NetworkMenuService;
 import network.skypvp.paper.service.PlayerInventoryManager;
@@ -103,6 +115,7 @@ import network.skypvp.paper.repository.PlayerSessionRepository;
 import network.skypvp.paper.repository.PlayerCurrencyRepository;
 import network.skypvp.paper.repository.PlayerStatsRepository;
 import network.skypvp.paper.service.ActionBarService;
+import network.skypvp.paper.service.PlayerHealthService;
 import network.skypvp.paper.service.BossBarService;
 
 import network.skypvp.paper.service.GameModeBehaviorService;
@@ -117,6 +130,14 @@ import network.skypvp.paper.service.ScoreboardService;
 import network.skypvp.paper.service.ServerLifecycleService;
 import network.skypvp.paper.service.SocialTeleportPolicyService;
 import network.skypvp.paper.service.TabListService;
+import network.skypvp.paper.tabboard.TabBoardService;
+import network.skypvp.paper.questdialogue.QuestDialogueChoiceStore;
+import network.skypvp.paper.questdialogue.InMemoryQuestDialogueChoiceStore;
+import network.skypvp.paper.questdialogue.PostgresQuestDialogueChoiceStore;
+import network.skypvp.paper.questdialogue.QuestDialogueBridge;
+import network.skypvp.paper.questdialogue.QuestDialogueInputListener;
+import network.skypvp.paper.questdialogue.QuestDialogueService;
+import network.skypvp.paper.waypoint.WaypointNavigatorService;
 import network.skypvp.paper.service.VanishService;
 import network.skypvp.paper.service.WebAdminIntegrationService;
 import network.skypvp.paper.service.WorldStateService;
@@ -137,10 +158,11 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.server.ServerLoadEvent;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.ServicePriority;
 import network.skypvp.paper.platform.PlatformTask;
+import network.skypvp.paper.platform.ServerLifecycleSupport;
 import org.bukkit.scheduler.BukkitTask;
 
 public final class PaperCorePlugin extends JavaPlugin {
@@ -164,6 +186,8 @@ public final class PaperCorePlugin extends JavaPlugin {
    private PaperDecorationRefreshSubscriber decorationRefreshSubscriber;
    private PaperChatFormatRefreshSubscriber chatFormatRefreshSubscriber;
    private PaperSocialSettingsRefreshSubscriber socialSettingsRefreshSubscriber;
+   private NetworkHeartbeatCache networkHeartbeatCache;
+   private PaperNetworkHeartbeatSubscriber networkHeartbeatSubscriber;
    private NpcRepository npcRepository;
    private HologramRepository hologramRepository;
    private NametagRepository nametagRepository;
@@ -177,12 +201,24 @@ public final class PaperCorePlugin extends JavaPlugin {
    private VanishService vanishService;
    private IgnoreCommand ignoreCommand;
    private TabListService tabListService;
+   private TabBoardService tabBoardService;
+   private QuestDialogueService questDialogueService;
+   private WaypointNavigatorService waypointNavigatorService;
+   private network.skypvp.paper.questsignal.QuestSignalService questSignalService;
+   private network.skypvp.paper.quest.QuestNpcService questNpcService;
+   private QuestDialogueRepository questDialogueRepository;
+   private network.skypvp.paper.repository.QuestNpcRepository questNpcRepository;
+   private QuestDialogueBridge questDialogueBridge;
    private ScoreboardService scoreboardService;
    private BossBarService bossBarService;
 
    private ActionBarService actionBarService;
+   private final PlayerHealthService playerHealthService = new PlayerHealthService();
+   private network.skypvp.paper.repository.PlayerLevelRepository playerLevelRepository;
+   private network.skypvp.paper.service.PlayerLevelService playerLevelService;
    private GuiManager guiManager;
    private NpcLibrary npcLibrary;
+   private HeadlessPlayerService headlessPlayerService;
    private HolographicLibrary holographicLibrary;
    private NametagLibrary nametagLibrary;
    private WorldStateService worldStateService;
@@ -202,6 +238,7 @@ public final class PaperCorePlugin extends JavaPlugin {
    private int advertisedPort;
    private ServerLifecycleService serverLifecycleService;
    private PerformanceMonitorService performanceMonitorService;
+   private network.skypvp.paper.clientupdate.ClientUpdatePipeline clientUpdatePipeline;
    private network.skypvp.paper.library.packet.PacketEntityInteractionService packetEntityInteractionService;
    private GameModeBehaviorService gameModeBehaviorService;
    private SocialTeleportPolicyService socialTeleportPolicyService;
@@ -213,6 +250,7 @@ public final class PaperCorePlugin extends JavaPlugin {
    private CoreHotbarService coreHotbarService;
    private SocialGraphRepository socialGraphRepository;
    private ExtractionInventoryRepository extractionInventoryRepository;
+   private ExtractionCraftingRepository extractionCraftingRepository;
    private PlayerInventoryManager playerInventoryManager;
    private RewardClaimMenuService rewardClaimMenuService;
    private NetworkMenuService networkMenuService;
@@ -227,6 +265,9 @@ public final class PaperCorePlugin extends JavaPlugin {
    private PlayerLocaleListener playerLocaleListener;
    private PartyMembershipRepository partyMembershipRepository;
    private PaperMenuListener paperMenuListener;
+   private CustomItemServiceImpl customItemService;
+   private ResourcePackService resourcePackService;
+   private ServerLifecycleSupport serverLifecycleSupport;
 
    public PaperCorePlugin() {
    }
@@ -240,12 +281,16 @@ public final class PaperCorePlugin extends JavaPlugin {
       this.gameModeBehaviorService = new GameModeBehaviorService(this, this.serverRole);
       this.socialTeleportPolicyService = new SocialTeleportPolicyService(this, this.gameModeBehaviorService);
       this.hudProviderService = new HudProviderService(this);
+      this.customItemService = new CustomItemServiceImpl(this);
+      this.getServer().getServicesManager().register(CustomItemService.class, this.customItemService, this, ServicePriority.Normal);
+      this.getLogger().info("[SkyPvPCore] Custom item engine enabled.");
       this.serverId = this.resolveServerId();
       this.lifecycleSource = this.resolveLifecycleSource();
       this.orchestrationGeneration = this.resolveOrchestrationGeneration();
       this.advertisedHost = this.resolveAdvertisedHost();
       this.advertisedPort = this.resolveAdvertisedPort();
       this.redisPublisher = this.createRedisPublisher();
+      this.networkHeartbeatCache = new NetworkHeartbeatCache();
       if (this.isRedisEnabled()) {
          RedisConnectionSettings redisSettings = new RedisConnectionSettings(
             this.redisHost(),
@@ -255,6 +300,14 @@ public final class PaperCorePlugin extends JavaPlugin {
          );
          this.webAdminIntegrationService = new WebAdminIntegrationService(redisSettings, this.serverId, this);
          this.webAdminIntegrationService.start();
+         String heartbeatChannel = this.getConfig().getString("network.heartbeat-channel", "skypvp:network:heartbeats");
+         this.networkHeartbeatSubscriber = new PaperNetworkHeartbeatSubscriber(
+            redisSettings,
+            heartbeatChannel,
+            this.networkHeartbeatCache,
+            this.getLogger()
+         );
+         this.networkHeartbeatSubscriber.start();
       }
 
       this.platform = PlatformScheduler.create(this);
@@ -263,6 +316,9 @@ public final class PaperCorePlugin extends JavaPlugin {
       } else {
          this.getLogger().info("[SkyPvPCore] Paper single-thread scheduler enabled.");
       }
+      this.resourcePackService = new ResourcePackService(this);
+      this.resourcePackService.start();
+      this.getServer().getPluginManager().registerEvents(new ResourcePackListener(this.resourcePackService), this);
       this.databaseManager = this.createDatabaseManager();
       this.asyncDbExecutor = this.databaseManager != null ? new AsyncDbExecutor(this.databaseManager, this, this.platform, this.getLogger()) : null;
       this.dbQueryService = this.databaseManager != null ? new DbQueryService(this.databaseManager, this, this.platform, this.getLogger()) : null;
@@ -275,6 +331,10 @@ public final class PaperCorePlugin extends JavaPlugin {
          this.partyGraphRepository = new PartyGraphRepository(this.asyncDbExecutor);
          this.socialGraphRepository = new SocialGraphRepository(this.asyncDbExecutor);
          this.extractionInventoryRepository = new ExtractionInventoryRepository(this.asyncDbExecutor);
+         this.playerLevelRepository = new network.skypvp.paper.repository.PlayerLevelRepository(this.asyncDbExecutor);
+         this.questDialogueRepository = new QuestDialogueRepository(this.asyncDbExecutor);
+         this.questNpcRepository = new network.skypvp.paper.repository.QuestNpcRepository(this.asyncDbExecutor);
+         this.extractionCraftingRepository = new ExtractionCraftingRepository(this.asyncDbExecutor, this.getLogger());
          this.playerSocialSettingsRepository = new PlayerSocialSettingsRepository(this.asyncDbExecutor);
          this.playerSocialSettingsService = new PlayerSocialSettingsService(this.playerSocialSettingsRepository);
          this.playerSocialSettingsService.setChangeListener(this::publishSocialSettingsRefresh);
@@ -356,6 +416,11 @@ public final class PaperCorePlugin extends JavaPlugin {
          this.partyGraphRepository.refreshAsync();
       }
 
+      // Level system runs with or without Postgres (session-only progression when the repository is absent).
+      this.playerLevelService = new network.skypvp.paper.service.PlayerLevelService(this, this.playerLevelRepository);
+      this.playerLevelService.start();
+      this.getServer().getPluginManager().registerEvents(this.playerLevelService, this);
+
       this.guiManager = new GuiManager(this, this.platform);
       this.coreHotbarService = new CoreHotbarService(this);
       if (this.extractionInventoryRepository != null) {
@@ -384,14 +449,33 @@ public final class PaperCorePlugin extends JavaPlugin {
          this.playerInventoryManager.bindVaultGui(vaultGuiService);
          VaultDecorationTags.init(this);
          this.extractionInventoryRepository.ensureVaultProgressSchema();
-         this.getServer().getPluginManager().registerEvents(new VaultGuiListener(vaultGuiService, this.coreHotbarService), this);
+         this.extractionInventoryRepository.ensureMaterialStashProgressSchema();
+         this.extractionInventoryRepository.ensureScrapperProgressSchema();
+         if (this.extractionCraftingRepository != null) {
+            this.extractionCraftingRepository.ensureSchema();
+         }
+         if (this.questDialogueRepository != null) {
+            this.questDialogueRepository.ensureSchema();
+         }
       }
+      QuestDialogueChoiceStore dialogueChoiceStore = this.questDialogueRepository != null
+              ? new PostgresQuestDialogueChoiceStore(this.questDialogueRepository)
+              : new InMemoryQuestDialogueChoiceStore();
       this.scoreboardService = new ScoreboardService(this, this.rankService);
+      this.questDialogueService = new QuestDialogueService(this, dialogueChoiceStore);
+      QuestDialogueInputListener dialogueInputListener = new QuestDialogueInputListener(this.questDialogueService, this);
+      this.getServer().getPluginManager().registerEvents(dialogueInputListener, this);
+      dialogueInputListener.startPacketListener();
+      this.waypointNavigatorService = new WaypointNavigatorService(this);
+      this.questSignalService = new network.skypvp.paper.questsignal.QuestSignalService(this);
+      this.questNpcService = new network.skypvp.paper.quest.QuestNpcService(this, this.questNpcRepository);
+      this.questNpcService.enable();
       this.bossBarService = new BossBarService(this);
       if (this.rankService != null) {
          this.actionBarService = new ActionBarService(this, this.rankService);
       }
       this.npcLibrary = new NpcLibrary(this);
+      this.headlessPlayerService = HeadlessPlayerServices.load(this);
       this.holographicLibrary = new HolographicLibrary(this);
       this.nametagLibrary = new NametagLibrary(this);
       if (PacketEventsBridge.isAvailable()) {
@@ -405,31 +489,29 @@ public final class PaperCorePlugin extends JavaPlugin {
       }
       this.worldStateService = new WorldStateService(this);
       this.worldStateService.initializeStartupReadiness();
-      this.getServer()
-         .getPluginManager()
-         .registerEvents(
-            new Listener() {
-               {
-                  Objects.requireNonNull(PaperCorePlugin.this);
-               }
-
-               @EventHandler
-               public void onServerLoad(ServerLoadEvent event) {
-                  if (PaperCorePlugin.this.worldStateService != null) {
-                     PaperCorePlugin.this.worldStateService.markServerLoadComplete();
-                     PaperCorePlugin.this.publishRoutingHeartbeat();
-                  }
-               }
-            },
-            this
-         );
+      // Mode plugins enable after core (POSTWORLD). Hold joinable until they release after bootstrap/warm.
+      if (this.serverRole == NetworkServerRole.LOBBY || this.serverRole == NetworkServerRole.EXTRACTION) {
+         this.worldStateService.holdRouting(WorldStateService.HOLD_MODE_PLUGIN);
+      }
+      this.serverLifecycleSupport = ServerLifecycleSupport.register(
+         this,
+         this.platform,
+         phase -> {
+            if (this.worldStateService != null) {
+               this.worldStateService.markPlatformLifecycleReady();
+               this.publishRoutingHeartbeat();
+            }
+         }
+      );
       this.paperMenuListener = new PaperMenuListener(this.networkMenuService);
       PaperMenuListener.register(this, this.paperMenuListener);
       this.getServer().getPluginManager().registerEvents(this.rewardClaimMenuService, this);
       this.getServer().getPluginManager().registerEvents(new CoreHotbarListener(this, this.coreHotbarService, this.networkMenuService), this);
       this.getServer().getPluginManager().registerEvents(new CoreHotbarLockListener(this.coreHotbarService), this);
+      this.getServer().getPluginManager().registerEvents(new CustomItemEquipmentListener(this.customItemService), this);
       this.getServer().getPluginManager().registerEvents(new WorldEnvironmentListener(this), this);
       this.getServer().getPluginManager().registerEvents(new VanillaAdvancementDisableListener(this), this);
+      this.getServer().getPluginManager().registerEvents(new RecipeBookDisableListener(), this);
       this.getServer().getPluginManager().registerEvents(this.guiManager, this);
       this.getServer().getPluginManager().registerEvents(new AfkDetectionListener(this), this);
       this.getServer().getPluginManager().registerEvents(new HologramInteractListener(this.holographicLibrary), this);
@@ -456,18 +538,33 @@ public final class PaperCorePlugin extends JavaPlugin {
       }
 
       if (this.rankService != null) {
-         this.tabListService = new TabListService(this, this.rankService);
+         this.tabBoardService = new TabBoardService(this);
+         getServer().getPluginManager().registerEvents(this.tabBoardService, this);
+         this.tabListService = new TabListService(this, this.rankService, this.tabBoardService);
+         // Respawns/world transfers reset client tab state; re-apply the full board a tick
+         // later on the viewer's own thread instead of waiting for the periodic refresh.
+         this.tabBoardService.bindReapply(viewer -> this.platformScheduler().runOnPlayerLater(
+                 viewer, () -> {
+                    if (viewer.isOnline() && this.tabListService != null) {
+                       this.tabListService.refreshPlayer(viewer);
+                    }
+                 }, 2L));
          int tabRefreshTicks = Math.max(
             20, this.gameModeBehaviorService.intValue("core.tab.refresh.ticks", 20)
          );
+         // HUD packets are client-bound and dominate network cost. Refreshing scoreboards/boss bars every tick
+         // (20/s) floods clients with redundant team/objective/boss-bar packets and shows up as huge ping jitter
+         // even while the server tick is idle. 4-5/s is visually smooth for animated text and cuts that packet
+         // volume by ~75-80%. The action bar stays a touch faster (10/s) so the health/shield vitals track hits,
+         // and damage still forces an immediate per-player refresh via ActionBarService#refreshPlayer.
          int scoreboardRefreshTicks = Math.max(
-            1, this.gameModeBehaviorService.intValue("core.hud.scoreboard.refresh-ticks", 1)
+            1, this.gameModeBehaviorService.intValue("core.hud.scoreboard.refresh-ticks", 4)
          );
          int bossBarRefreshTicks = Math.max(
-            1, this.gameModeBehaviorService.intValue("core.hud.boss-bar.refresh-ticks", 1)
+            1, this.gameModeBehaviorService.intValue("core.hud.boss-bar.refresh-ticks", 5)
          );
          int actionBarRefreshTicks = Math.max(
-            1, this.gameModeBehaviorService.intValue("core.hud.action-bar.refresh-ticks", 1)
+            1, this.gameModeBehaviorService.intValue("core.hud.action-bar.refresh-ticks", 2)
          );
          this.tabListTask = this.platform.runGlobalTimer(this.tabListService::refresh, (long)tabRefreshTicks, (long)tabRefreshTicks);
          this.scoreboardTask = this.platform.runGlobalTimer(this.scoreboardService::refresh, (long)scoreboardRefreshTicks, (long)scoreboardRefreshTicks);
@@ -475,6 +572,8 @@ public final class PaperCorePlugin extends JavaPlugin {
          if (this.actionBarService != null) {
             this.actionBarTask = this.platform.runGlobalTimer(this.actionBarService::refresh, (long)actionBarRefreshTicks, (long)actionBarRefreshTicks);
          }
+         this.clientUpdatePipeline = new network.skypvp.paper.clientupdate.ClientUpdatePipeline(this);
+         this.clientUpdatePipeline.start();
 
          this.getLogger()
             .info(
@@ -566,14 +665,14 @@ public final class PaperCorePlugin extends JavaPlugin {
 
       PluginCommand lagCmd = this.getCommand("lag");
       if (lagCmd != null && this.performanceMonitorService != null) {
-         LagCommand lagExecutor = new LagCommand(this.performanceMonitorService);
+         LagCommand lagExecutor = new LagCommand(this.performanceMonitorService, this.clientUpdatePipeline);
          lagCmd.setExecutor(lagExecutor);
          lagCmd.setTabCompleter(lagExecutor);
       }
 
       PluginCommand tpsCmd = this.getCommand("tps");
       if (tpsCmd != null && this.performanceMonitorService != null) {
-         tpsCmd.setExecutor(new LagCommand(this.performanceMonitorService));
+         tpsCmd.setExecutor(new LagCommand(this.performanceMonitorService, this.clientUpdatePipeline));
       }
 
       this.ignoreCommand = new IgnoreCommand(this);
@@ -693,6 +792,13 @@ public final class PaperCorePlugin extends JavaPlugin {
             holoAliasCmd.setTabCompleter(holoCmd);
          }
 
+         PlayBlocksCommand playBlocksCmd = new PlayBlocksCommand();
+         PluginCommand playBlocksPluginCmd = this.getCommand("playblocks");
+         if (playBlocksPluginCmd != null) {
+            playBlocksPluginCmd.setExecutor(playBlocksCmd);
+            playBlocksPluginCmd.setTabCompleter(playBlocksCmd);
+         }
+
          NametagCommand nametagCmd = new NametagCommand(this, this.nametagRepository, this.nametagLibrary, decoScope);
          PluginCommand nametagPluginCmd = this.getCommand("nametag");
          if (nametagPluginCmd != null) {
@@ -700,12 +806,28 @@ public final class PaperCorePlugin extends JavaPlugin {
             nametagPluginCmd.setTabCompleter(nametagCmd);
          }
 
-         this.platform.runGlobalLater(this::reloadDecorationsWhenReady, 60L);
+         this.platform.runGlobalLater(() -> {
+            // Avoid a second decoration reload during the post-spawn warmup window; that spike is what
+            // stalls limbo→lobby transfers in "Reconfiguring". Refresh only after routing is already open.
+            if (this.worldStateService != null && this.worldStateService.isJoinableForRouting()) {
+               this.reloadDecorationsWhenReady();
+            }
+         }, 60L);
       }
 
       PluginCommand webAuthCmd = this.getCommand("webauth");
       if (webAuthCmd != null) {
          webAuthCmd.setExecutor(new WebAuthCommand(this));
+      }
+
+      if (this.questNpcService != null) {
+         network.skypvp.paper.quest.QuestCommand questCmd =
+               new network.skypvp.paper.quest.QuestCommand(this, this.questNpcService);
+         PluginCommand questPluginCmd = this.getCommand("quest");
+         if (questPluginCmd != null) {
+            questPluginCmd.setExecutor(questCmd);
+            questPluginCmd.setTabCompleter(questCmd);
+         }
       }
 
       this.gracefulDrainService = new GracefulDrainService(this);
@@ -771,6 +893,10 @@ public final class PaperCorePlugin extends JavaPlugin {
    }
 
    public void onDisable() {
+      if (this.resourcePackService != null) {
+         this.resourcePackService.shutdown();
+         this.resourcePackService = null;
+      }
       if (this.heartbeatTask != null) {
          this.heartbeatTask.cancel();
          this.heartbeatTask = null;
@@ -786,6 +912,18 @@ public final class PaperCorePlugin extends JavaPlugin {
       if (this.nametagLibrary != null) {
          this.nametagLibrary.shutdown();
          this.nametagLibrary = null;
+      }
+      if (this.questNpcService != null) {
+         this.questNpcService.shutdown();
+         this.questNpcService = null;
+      }
+      if (this.waypointNavigatorService != null) {
+         this.waypointNavigatorService.shutdown();
+         this.waypointNavigatorService = null;
+      }
+      if (this.headlessPlayerService != null) {
+         this.headlessPlayerService.shutdown();
+         this.headlessPlayerService = null;
       }
       this.publishNotJoinableHeartbeatNow();
       if (this.shutdownHeartbeatHook != null) {
@@ -834,6 +972,10 @@ public final class PaperCorePlugin extends JavaPlugin {
          this.performanceMonitorService.stop();
       }
 
+      if (this.clientUpdatePipeline != null) {
+         this.clientUpdatePipeline.stop();
+      }
+
       if (this.webAdminIntegrationService != null) {
          this.webAdminIntegrationService.close();
       }
@@ -854,6 +996,10 @@ public final class PaperCorePlugin extends JavaPlugin {
 
       if (this.socialSettingsRefreshSubscriber != null) {
          this.socialSettingsRefreshSubscriber.close();
+      }
+
+      if (this.networkHeartbeatSubscriber != null) {
+         this.networkHeartbeatSubscriber.stop();
       }
 
       if (this.redisPublisher != null) {
@@ -932,61 +1078,117 @@ public final class PaperCorePlugin extends JavaPlugin {
    }
 
    public void reloadDecorationsWhenReady() {
-      this.reloadNpcDecorations();
-      this.reloadHologramDecorations();
-      this.reloadNametagDecorations();
+      this.reloadDecorationsWhenReady(null);
+   }
+
+   /**
+    * Reloads NPC/hologram/nametag decorations. Invokes {@code onComplete} on the global scheduler once all
+    * async loads have finished applying (or immediately if there is nothing to load).
+    */
+   public void reloadDecorationsWhenReady(Runnable onComplete) {
+      java.util.concurrent.atomic.AtomicInteger remaining = new java.util.concurrent.atomic.AtomicInteger(3);
+      Runnable done = () -> {
+         if (remaining.decrementAndGet() != 0) {
+            return;
+         }
+         if (onComplete != null) {
+            this.platform.runGlobal(onComplete);
+         }
+      };
+      this.reloadNpcDecorations(done);
+      this.reloadHologramDecorations(done);
+      this.reloadNametagDecorations(done);
    }
 
    public void reloadNpcDecorations() {
-      NpcRepository repo = this.npcRepository;
-      if (repo != null) {
-         this.asyncDbExecutor()
-            .handleOnMainThread(
-               repo.loadAllAsync(this.decorationScope()),
-               definitions -> {
-                  this.getLogger().info("[Decorations] Loaded " + definitions.size() + " NPC definition(s) for scope '" + this.decorationScope() + "'.");
-                  this.npcLibrary.clearAllPacketViewers();
-                  Map<String, List<NpcDefinition>> byWorld = definitions.stream()
-                     .filter(d -> d.location != null && d.location.world != null)
-                     .collect(Collectors.groupingBy(d -> d.location.world));
+      this.reloadNpcDecorations(null);
+   }
 
-                  for (World world : this.getServer().getWorlds()) {
-                     List<NpcDefinition> worldDefinitions = byWorld.getOrDefault(world.getName(), List.of());
-                     this.applyNpcDefinitionsForWorld(world, worldDefinitions);
-                  }
-                  this.npcLibrary.resyncAllViewers();
-               },
-               throwable -> this.getLogger().warning("[Decorations] NPC refresh load failed: " + throwable.getMessage())
-            );
+   public void reloadNpcDecorations(Runnable onComplete) {
+      NpcRepository repo = this.npcRepository;
+      if (repo == null || this.asyncDbExecutor() == null) {
+         if (onComplete != null) {
+            onComplete.run();
+         }
+         return;
       }
+      this.asyncDbExecutor()
+         .handleOnMainThread(
+            repo.loadAllAsync(this.decorationScope()),
+            definitions -> {
+               this.getLogger().info("[Decorations] Loaded " + definitions.size() + " NPC definition(s) for scope '" + this.decorationScope() + "'.");
+               this.npcLibrary.clearAllPacketViewers();
+               Map<String, List<NpcDefinition>> byWorld = definitions.stream()
+                  .filter(d -> d.location != null && d.location.world != null)
+                  .collect(Collectors.groupingBy(d -> d.location.world));
+
+               for (World world : this.getServer().getWorlds()) {
+                  List<NpcDefinition> worldDefinitions = byWorld.getOrDefault(world.getName(), List.of());
+                  this.applyNpcDefinitionsForWorld(world, worldDefinitions);
+               }
+               this.npcLibrary.resyncAllViewers();
+               if (onComplete != null) {
+                  onComplete.run();
+               }
+            },
+            throwable -> {
+               this.getLogger().warning("[Decorations] NPC refresh load failed: " + throwable.getMessage());
+               if (onComplete != null) {
+                  onComplete.run();
+               }
+            }
+         );
    }
 
    public void reloadHologramDecorations() {
-      HologramRepository repo = this.hologramRepository;
-      if (repo != null) {
-         this.asyncDbExecutor()
-            .handleOnMainThread(
-               repo.loadAllAsync(this.decorationScope()),
-               definitions -> {
-                  this.getLogger().info("[Decorations] Loaded " + definitions.size() + " hologram definition(s) for scope '" + this.decorationScope() + "'.");
-                  Map<String, List<HologramDefinition>> byWorld = definitions.stream()
-                     .filter(d -> d.anchor != null && d.anchor.world != null)
-                     .collect(Collectors.groupingBy(d -> d.anchor.world));
+      this.reloadHologramDecorations(null);
+   }
 
-                  for (World world : this.getServer().getWorlds()) {
-                     List<HologramDefinition> worldDefinitions = byWorld.getOrDefault(world.getName(), List.of());
-                     this.applyHologramDefinitionsForWorld(world, worldDefinitions);
-                  }
-               },
-               throwable -> this.getLogger().warning("[Decorations] Hologram refresh load failed: " + throwable.getMessage())
-            );
+   public void reloadHologramDecorations(Runnable onComplete) {
+      HologramRepository repo = this.hologramRepository;
+      if (repo == null || this.asyncDbExecutor() == null) {
+         if (onComplete != null) {
+            onComplete.run();
+         }
+         return;
       }
+      this.asyncDbExecutor()
+         .handleOnMainThread(
+            repo.loadAllAsync(this.decorationScope()),
+            definitions -> {
+               this.getLogger().info("[Decorations] Loaded " + definitions.size() + " hologram definition(s) for scope '" + this.decorationScope() + "'.");
+               Map<String, List<HologramDefinition>> byWorld = definitions.stream()
+                  .filter(d -> d.anchor != null && d.anchor.world != null)
+                  .collect(Collectors.groupingBy(d -> d.anchor.world));
+
+               for (World world : this.getServer().getWorlds()) {
+                  List<HologramDefinition> worldDefinitions = byWorld.getOrDefault(world.getName(), List.of());
+                  this.applyHologramDefinitionsForWorld(world, worldDefinitions);
+               }
+               if (onComplete != null) {
+                  onComplete.run();
+               }
+            },
+            throwable -> {
+               this.getLogger().warning("[Decorations] Hologram refresh load failed: " + throwable.getMessage());
+               if (onComplete != null) {
+                  onComplete.run();
+               }
+            }
+         );
    }
 
    public void reloadNametagDecorations() {
+      this.reloadNametagDecorations(null);
+   }
+
+   public void reloadNametagDecorations(Runnable onComplete) {
       NametagRepository repo = this.nametagRepository;
       NametagLibrary library = this.nametagLibrary;
-      if (repo == null || library == null) {
+      if (repo == null || library == null || this.asyncDbExecutor() == null) {
+         if (onComplete != null) {
+            onComplete.run();
+         }
          return;
       }
       String serverScope = this.decorationScope();
@@ -998,12 +1200,18 @@ public final class PaperCorePlugin extends JavaPlugin {
             library.applyDefinition(active);
             this.getLogger().info("[Nametags] Applied layout for server scope '" + serverScope + "' from "
                + definitions.size() + " stored definition(s).");
+            if (onComplete != null) {
+               onComplete.run();
+            }
          },
          throwable -> {
             this.getLogger().warning("[Nametags] Database load failed, using local cache: " + throwable.getMessage());
             List<NametagDefinition> cached = repo.readLocalCache();
             NametagDefinition active = NametagRepository.resolveActive(cached, serverScope);
             library.applyDefinition(active);
+            if (onComplete != null) {
+               onComplete.run();
+            }
          }
       );
    }
@@ -1102,6 +1310,10 @@ public final class PaperCorePlugin extends JavaPlugin {
       return this.networkServerDirectoryRepository;
    }
 
+   public NetworkHeartbeatCache networkHeartbeatCache() {
+      return this.networkHeartbeatCache;
+   }
+
    public PlayerSessionService sessionService() {
       return this.sessionService;
    }
@@ -1114,6 +1326,34 @@ public final class PaperCorePlugin extends JavaPlugin {
 
    public TabListService tabListService() {
       return this.tabListService;
+   }
+
+   public TabBoardService tabBoardService() {
+      return this.tabBoardService;
+   }
+
+   public QuestDialogueService questDialogueService() {
+      return this.questDialogueService;
+   }
+
+   public WaypointNavigatorService waypointNavigator() {
+      return this.waypointNavigatorService;
+   }
+
+   public network.skypvp.paper.quest.QuestNpcService questNpcService() {
+      return this.questNpcService;
+   }
+
+   public network.skypvp.paper.questsignal.QuestSignalService questSignals() {
+      return this.questSignalService;
+   }
+
+   public void bindQuestDialogueBridge(QuestDialogueBridge bridge) {
+      this.questDialogueBridge = bridge;
+   }
+
+   public QuestDialogueBridge questDialogueBridge() {
+      return this.questDialogueBridge;
    }
 
    public ScoreboardService scoreboardService() {
@@ -1130,8 +1370,28 @@ public final class PaperCorePlugin extends JavaPlugin {
       return this.actionBarService;
    }
 
+   public network.skypvp.paper.clientupdate.ClientUpdatePipeline clientUpdatePipeline() {
+      return this.clientUpdatePipeline;
+   }
+
+   public network.skypvp.paper.service.PlayerLevelService playerLevelService() {
+      return this.playerLevelService;
+   }
+
+   public PlayerHealthService playerHealthService() {
+      return this.playerHealthService;
+   }
+
    public HudProviderService hudProviderService() {
       return this.hudProviderService;
+   }
+
+   public ResourcePackService resourcePackService() {
+      return this.resourcePackService;
+   }
+
+   public CustomItemService customItemService() {
+      return this.customItemService;
    }
 
    public CoreHotbarService coreHotbarService() {
@@ -1152,6 +1412,10 @@ public final class PaperCorePlugin extends JavaPlugin {
 
    public ExtractionInventoryRepository extractionInventoryRepository() {
       return this.extractionInventoryRepository;
+   }
+
+   public ExtractionCraftingRepository extractionCraftingRepository() {
+      return this.extractionCraftingRepository;
    }
 
    public NetworkMenuService networkMenuService() {
@@ -1194,6 +1458,10 @@ public final class PaperCorePlugin extends JavaPlugin {
       return this.npcLibrary;
    }
 
+   public HeadlessPlayerService headlessPlayerService() {
+      return this.headlessPlayerService;
+   }
+
    public HolographicLibrary holographicLibrary() {
       return this.holographicLibrary;
    }
@@ -1208,6 +1476,12 @@ public final class PaperCorePlugin extends JavaPlugin {
 
    public RedisEventPublisher redisPublisher() {
       return this.redisPublisher;
+   }
+
+   public RedisConnectionSettings redisConnectionSettings() {
+      return this.isRedisEnabled()
+            ? new RedisConnectionSettings(this.redisHost(), this.redisPort(), this.redisPassword(), this.redisDatabase())
+            : null;
    }
 
    public WorldStateService worldStateService() {
@@ -1624,19 +1898,18 @@ public final class PaperCorePlugin extends JavaPlugin {
          int activeBreaches = 0;
          int queuedPlayers = 0;
          int maxPlayersPerPod = 0;
+         java.util.List<network.skypvp.shared.BreachInstanceSnapshot> breachInstances = java.util.List.of();
          BreachCapacityProvider capacityProvider = this.getServer().getServicesManager().load(BreachCapacityProvider.class);
          if (capacityProvider != null) {
             openBreachSlots = capacityProvider.openBreachSlots();
             activeBreaches = capacityProvider.activeBreaches();
             queuedPlayers = capacityProvider.queuedPlayers();
             maxPlayersPerPod = capacityProvider.maxPlayersPerPod();
+            breachInstances = capacityProvider.breachInstanceCatalog();
          }
 
          try {
-            this.redisPublisher
-               .publishJson(
-                  heartbeatChannel,
-                  new ServerHeartbeatEvent(
+            ServerHeartbeatEvent heartbeat = new ServerHeartbeatEvent(
                      this.serverId,
                      this.serverRole,
                      onlinePlayers,
@@ -1650,9 +1923,13 @@ public final class PaperCorePlugin extends JavaPlugin {
                      openBreachSlots,
                      activeBreaches,
                      queuedPlayers,
-                     maxPlayersPerPod
-                  )
-               );
+                     maxPlayersPerPod,
+                     breachInstances
+                  );
+            if (this.networkHeartbeatCache != null) {
+               this.networkHeartbeatCache.apply(heartbeat);
+            }
+            this.redisPublisher.publishJson(heartbeatChannel, heartbeat);
          } catch (RuntimeException var9) {
             long now = System.currentTimeMillis();
             if (now - this.lastRedisWarningEpochMillis >= 30000L) {

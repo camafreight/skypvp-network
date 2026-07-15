@@ -1,31 +1,43 @@
 package network.skypvp.extraction.listener;
 
 import network.skypvp.extraction.integration.WeaponMechanicsBridge;
-import org.bukkit.GameMode;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.ExplosionPrimeEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 
 /**
  * Blocks vanilla and WeaponMechanics explosions in the extraction hub, while allowing
  * WeaponMechanics block damage during active breach raids.
+ *
+ * <p>Breach worlds also lock player block break/place/interact for every gamemode and permission.
+ * Hub worlds rely on paper-core {@code WorldEnvironmentListener} for the same lock.
  */
 public final class ExtractionEnvironmentGuard implements Listener {
 
+    /** @deprecated Bypass is intentionally unused; kept for callers that still reference the constant. */
+    @Deprecated
     public static final String BUILD_BYPASS_PERMISSION = "skypvp.build.bypass";
 
-    private final WeaponMechanicsBridge weaponMechanicsBridge;
+    public ExtractionEnvironmentGuard() {
+    }
 
+    /** @param weaponMechanicsBridge unused; retained for call-site compatibility */
     public ExtractionEnvironmentGuard(WeaponMechanicsBridge weaponMechanicsBridge) {
-        this.weaponMechanicsBridge = weaponMechanicsBridge;
+        this();
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -70,34 +82,64 @@ public final class ExtractionEnvironmentGuard implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        World world = event.getBlock().getWorld();
-        if (!this.isBreachWorld(world)) {
-            return;
-        }
-        Player player = event.getPlayer();
-        if (this.canBypassBuild(player)) {
-            return;
-        }
-        if (this.weaponMechanicsBridge != null && this.weaponMechanicsBridge.isWeaponItem(player.getInventory().getItemInMainHand())) {
-            return;
-        }
-        if (this.weaponMechanicsBridge != null && this.weaponMechanicsBridge.isWeaponItem(player.getInventory().getItemInOffHand())) {
+        if (!this.isBreachWorld(event.getBlock().getWorld())) {
             return;
         }
         event.setCancelled(true);
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
-        World world = event.getBlock().getWorld();
-        if (!this.isBreachWorld(world)) {
+        if (!this.isBreachWorld(event.getBlock().getWorld())) {
             return;
         }
-        if (!this.canBypassBuild(event.getPlayer())) {
-            event.setCancelled(true);
+        event.setCancelled(true);
+    }
+
+    /**
+     * Denies doors/chests/buttons/etc. Item-use still fires so guns/consumables work.
+     * Breach loot chests open via their own listener reading the clicked block.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        if (!this.isBreachWorld(event.getPlayer().getWorld())) {
+            return;
         }
+        Action action = event.getAction();
+        if (action == Action.PHYSICAL) {
+            event.setCancelled(true);
+            return;
+        }
+        if ((action == Action.RIGHT_CLICK_BLOCK || action == Action.LEFT_CLICK_BLOCK)
+                && event.getClickedBlock() != null) {
+            event.setUseInteractedBlock(Event.Result.DENY);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBucketEmpty(PlayerBucketEmptyEvent event) {
+        if (!this.isBreachWorld(event.getBlock().getWorld())) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBucketFill(PlayerBucketFillEvent event) {
+        if (!this.isBreachWorld(event.getBlock().getWorld())) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onSignChange(SignChangeEvent event) {
+        if (!this.isBreachWorld(event.getBlock().getWorld())) {
+            return;
+        }
+        event.setCancelled(true);
     }
 
     private boolean isHubWorld(World world) {
@@ -120,15 +162,5 @@ public final class ExtractionEnvironmentGuard implements Listener {
     private void cancelExplosion(BlockExplodeEvent event) {
         event.setCancelled(true);
         event.blockList().clear();
-    }
-
-    private boolean canBypassBuild(Player player) {
-        if (player == null) {
-            return true;
-        }
-        GameMode mode = player.getGameMode();
-        return mode == GameMode.CREATIVE
-                || mode == GameMode.SPECTATOR
-                || player.hasPermission(BUILD_BYPASS_PERMISSION);
     }
 }

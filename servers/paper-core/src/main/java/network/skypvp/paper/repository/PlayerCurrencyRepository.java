@@ -204,6 +204,26 @@ public final class PlayerCurrencyRepository {
       });
    }
 
+   /**
+    * Atomically deducts {@code amount} gold when the player has sufficient balance.
+    * Returns {@code true} when the deduction succeeded.
+    */
+   public CompletableFuture<Boolean> trySpendGold(UUID uuid, long amount) {
+      if (!this.ready || uuid == null || amount <= 0L) {
+         return CompletableFuture.completedFuture(true);
+      }
+      String sql = "UPDATE network_player_currency SET gold = gold - ?, updated_at = NOW() "
+         + "WHERE player_uuid = ? AND gold >= ?";
+      return this.asyncDbExecutor.supply("currency.trySpendGold", connection -> {
+         try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, amount);
+            ps.setObject(2, uuid);
+            ps.setLong(3, amount);
+            return ps.executeUpdate() > 0;
+         }
+      });
+   }
+
    private void add(UUID uuid, String column, long amount) {
       if (!this.ready || amount == 0L) {
          return;

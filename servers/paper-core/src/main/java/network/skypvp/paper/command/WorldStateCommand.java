@@ -85,6 +85,11 @@ public final class WorldStateCommand implements CommandExecutor, TabCompleter {
       sender.sendMessage(ServerTextUtil.miniMessageComponent("  " + statusFormatted));
       String joinableFormatted = FieldValueFormatter.fieldValueMiniMessage("Joinable", String.valueOf(this.worldState.isJoinableForRouting()));
       sender.sendMessage(ServerTextUtil.miniMessageComponent("  " + joinableFormatted));
+      String holds = this.worldState.routingHolds().isEmpty()
+            ? "(none)"
+            : String.join(", ", this.worldState.routingHolds());
+      String holdsFormatted = FieldValueFormatter.fieldValueMiniMessage("Routing Holds", holds);
+      sender.sendMessage(ServerTextUtil.miniMessageComponent("  " + holdsFormatted));
       String resetInProgressFormatted = FieldValueFormatter.fieldValueMiniMessage("Reset In Progress", String.valueOf(this.worldState.isResetInProgress()));
       sender.sendMessage(ServerTextUtil.miniMessageComponent("  " + resetInProgressFormatted));
       String startupSyncFormatted = FieldValueFormatter.fieldValueMiniMessage("Startup Sync", String.valueOf(this.worldState.isStartupSyncInProgress()));

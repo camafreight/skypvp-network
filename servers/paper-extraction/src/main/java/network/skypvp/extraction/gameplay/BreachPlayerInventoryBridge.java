@@ -38,6 +38,43 @@ public final class BreachPlayerInventoryBridge {
         }, runnable -> this.core.platformScheduler().runAsync(runnable));
     }
 
+    /**
+     * Mid-raid disconnect where the slot is HELD for reconnect: persist the current gear into the RAID container
+     * (escrow) but never wipe it. Reconnect ({@link #onResumeRaid}) reloads exactly this. Contrast with
+     * {@link #onAbandonRaid} which clears the escrow.
+     */
+    public void onDisconnectAway(Player player) {
+        if (player == null) {
+            return;
+        }
+        this.inRaid.remove(player.getUniqueId());
+        PlayerInventoryManager inventoryManager = this.inventoryManager();
+        if (inventoryManager != null) {
+            inventoryManager.cancelPendingRaidSaves(player.getUniqueId());
+            inventoryManager.flushRaidInventorySave(player);
+        }
+    }
+
+    /**
+     * Reconnect re-seat: reload the escrowed RAID container back onto the player. Unlike {@link #onJoinRaid} this does
+     * NOT flush the (post-login) inventory first, so the escrow can never be overwritten by the transient join state.
+     */
+    public void onResumeRaid(Player player) {
+        if (player == null || this.inventoryManager() == null) {
+            return;
+        }
+        this.inRaid.put(player.getUniqueId(), true);
+        PlayerInventoryManager pim = this.inventoryManager();
+        pim.cancelPendingRaidSaves(player.getUniqueId());
+        pim.prepareForRaid(player, () -> this.isInRaid(player.getUniqueId())).thenAcceptAsync(ignored -> {
+            this.core.platformScheduler().runOnPlayer(player, () -> {
+                if (player.isOnline() && this.isInRaid(player.getUniqueId())) {
+                    this.hotbarService().ensureActiveRaidHotbar(player);
+                }
+            });
+        }, runnable -> this.core.platformScheduler().runAsync(runnable));
+    }
+
     public void onCancelPendingJoin(Player player) {
         if (player == null) {
             return;
@@ -51,6 +88,11 @@ public final class BreachPlayerInventoryBridge {
         this.hotbarService().ensureNetworkItems(player);
     }
 
+    /**
+     * Successful extract at hub: merge raid loot into the vault, wipe the RAID escrow, then restore
+     * the hub loadout. Caller must already have teleported the player out of the breach — this never
+     * leaves them in-raid waiting on Postgres.
+     */
     public CompletableFuture<Void> onExtractSuccess(Player player) {
         if (player == null || this.inventoryManager() == null) {
             return CompletableFuture.completedFuture(null);
@@ -58,10 +100,10 @@ public final class BreachPlayerInventoryBridge {
         this.inRaid.remove(player.getUniqueId());
         PlayerInventoryManager inventoryManager = this.inventoryManager();
         inventoryManager.cancelPendingRaidSaves(player.getUniqueId());
-        return inventoryManager.saveRaidInventory(player).thenAcceptAsync(ignored -> {
+        return inventoryManager.commitExtract(player).thenAcceptAsync(ignored -> {
             this.core.platformScheduler().runOnPlayer(player, () -> {
                 if (player.isOnline()) {
-                    this.ensureHubHotbar(player);
+                    this.restoreHubInventory(player);
                 }
             });
         }, runnable -> this.core.platformScheduler().runAsync(runnable));
@@ -135,13 +177,6 @@ public final class BreachPlayerInventoryBridge {
         player.getInventory().clear();
         player.getInventory().setArmorContents(null);
         this.hotbarService().ensureActiveRaidHotbar(player);
-    }
-
-    private void ensureHubHotbar(Player player) {
-        if (player == null) {
-            return;
-        }
-        this.hotbarService().ensureNetworkItems(player);
     }
 
     public boolean isInRaid(UUID playerId) {

@@ -38,12 +38,23 @@ $tags = @{}
 
 & (Join-Path $PSScriptRoot 'infra/scripts/Generate-FloodgateKey.ps1')
 Write-Host 'Staging Bedrock plugin jars...' -ForegroundColor Cyan
-Push-Location $PSScriptRoot
-try {
-    .\gradlew.bat deployJars stageBedrockPlugins stageLuckPermsPlugins stageFoliaJar -q
-}
-finally {
-    Pop-Location
+if ($env:SKYPVP_SKIP_GRADLE -eq '1') {
+    # Jars were staged by an external build (e.g. dockerized gradle when the host JVM
+    # cannot bind loopback sockets); skip the in-process build but keep everything else.
+    Write-Host 'SKYPVP_SKIP_GRADLE=1 — using pre-staged jars.' -ForegroundColor Yellow
+} else {
+    Push-Location $PSScriptRoot
+    try {
+        .\gradlew.bat deployJars stageBedrockPlugins stageLuckPermsPlugins stageFoliaJar -q
+        # Native exit codes do NOT trip $ErrorActionPreference: without this guard a failed
+        # build (e.g. gradle's loopback error) silently ships the previously staged jars.
+        if ($LASTEXITCODE -ne 0) {
+            throw "gradlew deployJars failed (exit $LASTEXITCODE) - aborting so stale jars are never shipped."
+        }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 Write-Host "Building Docker images with tag suffix: $buildId" -ForegroundColor Cyan

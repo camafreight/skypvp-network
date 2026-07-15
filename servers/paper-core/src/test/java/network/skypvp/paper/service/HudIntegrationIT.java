@@ -53,7 +53,7 @@ public class HudIntegrationIT {
         Mockito.when(mockRankService.getCached(Mockito.any())).thenReturn(RankRecord.DEFAULT);
 
         scoreboardService = new ScoreboardService(mockPlugin, mockRankService);
-        tabListService = new TabListService(mockPlugin, mockRankService);
+        tabListService = new TabListService(mockPlugin, mockRankService, null);
         client = new MockPacketClient();
 
         Mockito.when(mockServer.getOnlinePlayers()).thenReturn((java.util.Collection) List.of(client.getMockPlayer()));

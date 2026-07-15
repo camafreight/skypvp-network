@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import network.skypvp.proxy.config.ProxyBootstrapConfig;
 import network.skypvp.proxy.registry.NetworkStateRegistry;
+import network.skypvp.proxy.registry.PrivateMessageRegistry;
 import network.skypvp.proxy.repository.PlayerSocialSettingsRepository;
 import network.skypvp.shared.PlayerSessionAction;
 import network.skypvp.shared.PlayerSessionEvent;
@@ -21,6 +22,7 @@ public final class ProxyConnectionListener {
    private final RedisEventPublisher redisPublisher;
    private final NetworkStateRegistry stateRegistry;
    private final PlayerSocialSettingsRepository socialSettingsRepository;
+   private final PrivateMessageRegistry privateMessageRegistry;
    private final Map<UUID, Long> connectedAtEpochMillis = new ConcurrentHashMap<>();
 
    public ProxyConnectionListener(
@@ -29,7 +31,7 @@ public final class ProxyConnectionListener {
       RedisEventPublisher redisPublisher,
       NetworkStateRegistry stateRegistry
    ) {
-      this(logger, config, redisPublisher, stateRegistry, null);
+      this(logger, config, redisPublisher, stateRegistry, null, null);
    }
 
    public ProxyConnectionListener(
@@ -39,11 +41,23 @@ public final class ProxyConnectionListener {
       NetworkStateRegistry stateRegistry,
       PlayerSocialSettingsRepository socialSettingsRepository
    ) {
+      this(logger, config, redisPublisher, stateRegistry, socialSettingsRepository, null);
+   }
+
+   public ProxyConnectionListener(
+      Logger logger,
+      ProxyBootstrapConfig config,
+      RedisEventPublisher redisPublisher,
+      NetworkStateRegistry stateRegistry,
+      PlayerSocialSettingsRepository socialSettingsRepository,
+      PrivateMessageRegistry privateMessageRegistry
+   ) {
       this.logger = logger;
       this.config = config;
       this.redisPublisher = redisPublisher;
       this.stateRegistry = stateRegistry;
       this.socialSettingsRepository = socialSettingsRepository;
+      this.privateMessageRegistry = privateMessageRegistry;
    }
 
    @Subscribe
@@ -54,12 +68,11 @@ public final class ProxyConnectionListener {
       if (this.socialSettingsRepository != null) {
          this.socialSettingsRepository.preload(playerId);
       }
+      PlayerSessionEvent sessionEvent =
+         new PlayerSessionEvent(PlayerSessionAction.AUTHENTICATED, playerId, event.getPlayer().getUsername(), null, now);
+      this.applyLocally(sessionEvent);
       if (this.redisPublisher != null) {
-         this.redisPublisher
-            .publishJson(
-               this.config.sessionChannel,
-               new PlayerSessionEvent(PlayerSessionAction.AUTHENTICATED, playerId, event.getPlayer().getUsername(), null, now)
-            );
+         this.redisPublisher.publishJson(this.config.sessionChannel, sessionEvent);
       }
 
       this.logger.info("Player '{}' authenticated for network '{}'", event.getPlayer().getUsername(), this.config.networkName);
@@ -67,18 +80,16 @@ public final class ProxyConnectionListener {
 
    @Subscribe
    public void onServerConnected(ServerConnectedEvent event) {
+      PlayerSessionEvent sessionEvent = new PlayerSessionEvent(
+         PlayerSessionAction.SERVER_CONNECTED,
+         event.getPlayer().getUniqueId(),
+         event.getPlayer().getUsername(),
+         event.getServer().getServerInfo().getName(),
+         System.currentTimeMillis()
+      );
+      this.applyLocally(sessionEvent);
       if (this.redisPublisher != null) {
-         this.redisPublisher
-            .publishJson(
-               this.config.sessionChannel,
-               new PlayerSessionEvent(
-                  PlayerSessionAction.SERVER_CONNECTED,
-                  event.getPlayer().getUniqueId(),
-                  event.getPlayer().getUsername(),
-                  event.getServer().getServerInfo().getName(),
-                  System.currentTimeMillis()
-               )
-            );
+         this.redisPublisher.publishJson(this.config.sessionChannel, sessionEvent);
       }
 
       this.logger.info("Player '{}' connected to backend '{}'", event.getPlayer().getUsername(), event.getServer().getServerInfo().getName());
@@ -91,21 +102,33 @@ public final class ProxyConnectionListener {
       if (this.socialSettingsRepository != null) {
          this.socialSettingsRepository.evict(playerId);
       }
+      if (this.privateMessageRegistry != null) {
+         this.privateMessageRegistry.evict(playerId);
+      }
+      PlayerSessionEvent sessionEvent = new PlayerSessionEvent(
+         PlayerSessionAction.DISCONNECTED,
+         playerId,
+         event.getPlayer().getUsername(),
+         event.getPlayer().getCurrentServer().map(serverConnection -> serverConnection.getServerInfo().getName()).orElse(null),
+         connectedAt
+      );
+      this.applyLocally(sessionEvent);
       if (this.redisPublisher != null) {
-         this.redisPublisher
-            .publishJson(
-               this.config.sessionChannel,
-               new PlayerSessionEvent(
-                  PlayerSessionAction.DISCONNECTED,
-                  playerId,
-                  event.getPlayer().getUsername(),
-                  event.getPlayer().getCurrentServer().map(serverConnection -> serverConnection.getServerInfo().getName()).orElse(null),
-                  connectedAt
-               )
-            );
+         this.redisPublisher.publishJson(this.config.sessionChannel, sessionEvent);
       }
 
       this.connectedAtEpochMillis.remove(playerId);
       this.logger.info("Player '{}' disconnected from the proxy", event.getPlayer().getUsername());
+   }
+
+   /**
+    * Event-driven registry update straight off the Velocity event. Session state used to depend entirely on the
+    * published event surviving the Redis round trip back to this proxy — a pub/sub hiccup left ghost sessions
+    * behind until the periodic sweep caught them. Applying locally is idempotent with the Redis echo.
+    */
+   private void applyLocally(PlayerSessionEvent sessionEvent) {
+      if (this.stateRegistry != null) {
+         this.stateRegistry.applyPlayerSession(sessionEvent);
+      }
    }
 }

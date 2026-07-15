@@ -134,18 +134,115 @@ public final class BreachPlayerCorpseService {
             }
         }
 
+        this.buildCorpse(
+                owner.getUniqueId(),
+                owner.getName(),
+                location,
+                loot,
+                textureValue,
+                textureSignature,
+                true,
+                0L
+        );
+    }
+
+    /**
+     * Spawns a lootable corpse from a precomputed loot snapshot (used when an AFK stand-in for a disconnected raider is
+     * killed or its reconnect grace expires — the owner is offline, so their gear was captured earlier). Resolves solid
+     * ground and skips silently if the snapshot has no loot.
+     */
+    public void spawnCorpseFromSnapshot(
+            UUID ownerId,
+            String ownerName,
+            Location deathLocation,
+            ItemStack[] loot,
+            String textureValue,
+            String textureSignature
+    ) {
+        if (ownerId == null || deathLocation == null || deathLocation.getWorld() == null
+                || BreachPlayerCorpseLayout.isEmpty(loot)) {
+            return;
+        }
+        Optional<BreachCorpseGround.Anchor> groundOptional = BreachCorpseGround.resolve(deathLocation.clone());
+        Location location = groundOptional
+                .map(anchor -> this.spreadIfOverlapping(anchor.bodyLocation().clone()))
+                .orElseGet(() -> this.spreadIfOverlapping(deathLocation.clone()));
+        String safeName = ownerName == null ? "Raider" : ownerName;
+        this.buildCorpse(ownerId, safeName, location, loot, textureValue, textureSignature, true, 0L);
+    }
+
+    /**
+     * Lootable AI raider corpse: same packet body as player deaths, but no floating nametag, and auto-removed after
+     * {@code despawnTicks} if not fully looted.
+     *
+     * @param skinProfileName Steve/Alex (or similar) profile name for default skin; textures may be null
+     */
+    public void spawnMobCorpse(
+            Location deathLocation,
+            ItemStack[] loot,
+            String displayName,
+            String skinProfileName,
+            long despawnTicks
+    ) {
+        if (deathLocation == null || deathLocation.getWorld() == null || BreachPlayerCorpseLayout.isEmpty(loot)) {
+            return;
+        }
+        Optional<BreachCorpseGround.Anchor> groundOptional = BreachCorpseGround.resolve(deathLocation.clone());
+        Location location = groundOptional
+                .map(anchor -> this.spreadIfOverlapping(anchor.bodyLocation().clone()))
+                .orElseGet(() -> this.spreadIfOverlapping(deathLocation.clone()));
+        String label = displayName == null || displayName.isBlank() ? "Raider" : displayName;
+        String skin = skinProfileName == null || skinProfileName.isBlank() ? "Steve" : skinProfileName;
+        this.buildCorpse(
+                UUID.randomUUID(),
+                label,
+                location,
+                loot,
+                null,
+                null,
+                false,
+                Math.max(0L, despawnTicks),
+                skin
+        );
+    }
+
+    private void buildCorpse(
+            UUID ownerId,
+            String ownerName,
+            Location location,
+            ItemStack[] loot,
+            String textureValue,
+            String textureSignature,
+            boolean showNameLabel,
+            long despawnTicks
+    ) {
+        this.buildCorpse(
+                ownerId, ownerName, location, loot, textureValue, textureSignature, showNameLabel, despawnTicks, ownerName);
+    }
+
+    private void buildCorpse(
+            UUID ownerId,
+            String ownerName,
+            Location location,
+            ItemStack[] loot,
+            String textureValue,
+            String textureSignature,
+            boolean showNameLabel,
+            long despawnTicks,
+            String profileName
+    ) {
         UUID corpseId = UUID.randomUUID();
         PacketCorpseDisplay display;
         try {
             display = new PacketCorpseDisplay(
                     this.plugin,
-                    owner.getName(),
+                    profileName == null || profileName.isBlank() ? ownerName : profileName,
                     textureValue,
                     textureSignature,
                     location
             );
         } catch (RuntimeException exception) {
-            this.plugin.getLogger().warning("[Corpse] Visual spawn failed for " + owner.getName() + ": " + exception.getMessage());
+            this.plugin.getLogger().warning("[Corpse] Visual spawn failed for " + ownerName + ": " + exception.getMessage());
             display = null;
         }
 
@@ -161,7 +258,9 @@ public final class BreachPlayerCorpseService {
             bodyEntityId = display.bodyEntityId();
             UUID capturedCorpseId = corpseId;
             this.interactionService().register(bodyEntityId, looter -> this.openLootById(capturedCorpseId, looter));
-            labelId = this.spawnNameLabel(world, location, corpseId, owner.getName());
+            if (showNameLabel) {
+                labelId = this.spawnNameLabel(world, location, corpseId, ownerName);
+            }
         } else {
             // Visual failed (very rare): fall back to a server-side Interaction entity so the loot is still reachable.
             Interaction hitbox = world.spawn(location.clone().add(0.0, -0.2, 0.0), Interaction.class, interaction -> {
@@ -177,8 +276,8 @@ public final class BreachPlayerCorpseService {
 
         BreachPlayerCorpseState state = new BreachPlayerCorpseState(
                 corpseId,
-                owner.getUniqueId(),
-                owner.getName(),
+                ownerId,
+                ownerName,
                 world.getUID(),
                 location.clone(),
                 display,
@@ -188,9 +287,22 @@ public final class BreachPlayerCorpseService {
                 loot
         );
         this.corpses.put(corpseId, state);
-        this.plugin.getLogger().info("[Corpse] Spawned corpse for " + owner.getName() + " at "
+        if (despawnTicks > 0L) {
+            Location expireAt = location.clone();
+            this.scheduler.runGlobalLater(() -> this.scheduler.runAtLocation(
+                    expireAt,
+                    () -> {
+                        if (this.corpses.containsKey(corpseId)) {
+                            this.removeCorpse(corpseId);
+                        }
+                    }
+            ), despawnTicks);
+        }
+        this.plugin.getLogger().info("[Corpse] Spawned corpse for " + ownerName + " at "
                 + location.getBlockX() + ", " + location.getBlockY() + ", " + location.getBlockZ()
-                + (display == null ? " (loot only; visual failed)" : ""));
+                + (display == null ? " (loot only; visual failed)" : "")
+                + (showNameLabel ? "" : " (no nametag)")
+                + (despawnTicks > 0L ? " (despawn " + despawnTicks + "t)" : ""));
     }
 
     private PacketEntityInteractionService interactionService() {
@@ -219,28 +331,42 @@ public final class BreachPlayerCorpseService {
         }
         Inventory inventory = this.liveInventories.computeIfAbsent(
                 state.corpseId(),
-                id -> BreachPlayerCorpseLayout.createInventory(
-                        new BreachPlayerCorpseHolder(id),
-                        state.ownerName(),
-                        state.loot(),
-                        looter
-                )
+                id -> {
+                    BreachPlayerCorpseHolder holder = new BreachPlayerCorpseHolder(id);
+                    Inventory created = org.bukkit.Bukkit.createInventory(
+                            holder,
+                            BreachPlayerCorpseLayout.INVENTORY_SIZE,
+                            ExtractionTexts.miniMessage(null, "extraction.gui.corpse.title", state.ownerName())
+                    );
+                    holder.bindInventory(created);
+                    BreachPlayerCorpseLayout.fill(created, state.loot());
+                    return created;
+                }
         );
         if (BreachPlayerCorpseLayout.isEmptyInventory(inventory)) {
             this.removeCorpse(state.corpseId());
             return;
         }
-        looter.openInventory(inventory);
+        BreachPlayerCorpseMenu menu = new BreachPlayerCorpseMenu(state, this, this.core.coreHotbarService());
+        this.core.guiManager().openWithInventory(looter, menu, inventory, true);
     }
 
-    public void syncClosedInventory(BreachPlayerCorpseState state, Inventory inventory) {
-        if (state == null || inventory == null) {
+    /** Called from {@link BreachPlayerCorpseMenu} after the GUI framework closes the inventory. */
+    public void afterCorpseMenuClosed(BreachPlayerCorpseState state) {
+        if (state == null) {
             return;
         }
-        BreachPlayerCorpseLayout.syncFromInventory(inventory, state.loot());
+        Inventory inventory = this.liveInventories.get(state.corpseId());
+        if (inventory != null) {
+            BreachPlayerCorpseLayout.syncFromInventory(inventory, state.loot());
+        }
         if (BreachPlayerCorpseLayout.isEmpty(state.loot())) {
             this.removeCorpse(state.corpseId());
         }
+    }
+
+    public void syncClosedInventory(BreachPlayerCorpseState state, Inventory inventory) {
+        afterCorpseMenuClosed(state);
     }
 
     public void showCorpsesInWorld(Player player) {

@@ -203,7 +203,7 @@ public final class SocialMenuService {
                 .renderItem((viewer, friend) -> GuiItems.playerHead(
                         friend.playerId(),
                         "<#FFFFFF>" + friend.username(),
-                        GuiTextLibrary.standardLore(List.of("<#888888>Click to view profile"))
+                        GuiTextLibrary.lore().raw("<#888888>Click to view profile").build()
                 ))
                 .onItemClick((context, friend) -> this.openFriendProfile(context.viewer(), friend))
                 .button(FRIEND_BACK_SLOT, viewer -> GuiButtonLibrary.backToMainMenu(), context -> this.openRootMenu.accept(context.viewer()))
@@ -250,7 +250,7 @@ public final class SocialMenuService {
                 GuiItems.playerHead(
                         friend.playerId(),
                         "<#FFD700>" + friend.username(),
-                        GuiTextLibrary.standardLore(List.of("<#888888>Friend profile"))
+                        GuiTextLibrary.lore().raw("<#888888>Friend profile").build()
                 ),
                 context -> {
                 }
@@ -259,15 +259,14 @@ public final class SocialMenuService {
         if (stats == null) {
             menu.button(
                     statsSlot,
-                    GuiButtonLibrary.infoCard(Material.BOOK, "No stats yet", lore -> lore.plain("This player has no recorded stats.")),
+                    GuiButtonLibrary.infoExclamation("No stats yet", lore -> lore.plain("This player has no recorded stats.")),
                     context -> {
                     }
             );
         } else {
             menu.button(
                     statsSlot,
-                    GuiButtonLibrary.infoCard(
-                            Material.BOOK,
+                    GuiButtonLibrary.infoQuestion(
                             "Stats",
                             lore -> {
                                 lore.fact("Kills", String.valueOf(stats.kills()));

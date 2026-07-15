@@ -1,0 +1,6 @@
+// Paper-api-only contract module. Holds the HeadlessPlayerService interface + value types so that
+// paper-core (compiled against paper-api) and the paperweight NMS impl (paper-nms) can share it
+// without a build cycle. This module MUST NOT depend on NMS/paperweight.
+dependencies {
+    compileOnly "io.papermc.paper:paper-api:${rootProject.ext.paperApiVersion}"
+}

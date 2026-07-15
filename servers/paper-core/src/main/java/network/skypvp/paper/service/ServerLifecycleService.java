@@ -17,6 +17,7 @@ public final class ServerLifecycleService {
    private static final int RESTART_AFTER_MINUTES = 360;
    private static final List<Integer> WARNING_MINUTES = List.of(30, 15, 10, 5, 1);
    private static final int COUNTDOWN_SECONDS = 10;
+   private static final int DRAIN_GRACE_SECONDS = 45;
    private final PaperCorePlugin plugin;
    private final boolean enabled;
    private final long restartAfterMillis;
@@ -27,6 +28,8 @@ public final class ServerLifecycleService {
    private boolean armed;
    private boolean countdownActive;
    private int countdownRemainingSeconds;
+   private boolean drainPhaseActive;
+   private int drainGraceRemainingSeconds;
    private long deadlineEpochMillis;
 
    public ServerLifecycleService(PaperCorePlugin plugin) {
@@ -91,6 +94,8 @@ public final class ServerLifecycleService {
       this.armed = true;
       this.countdownActive = false;
       this.countdownRemainingSeconds = 0;
+      this.drainPhaseActive = false;
+      this.drainGraceRemainingSeconds = 0;
       this.sentWarnings.clear();
       this.deadlineEpochMillis = System.currentTimeMillis() + this.restartAfterMillis;
       sender.sendMessage(
@@ -106,6 +111,8 @@ public final class ServerLifecycleService {
       this.armed = false;
       this.countdownActive = false;
       this.countdownRemainingSeconds = 0;
+      this.drainPhaseActive = false;
+      this.drainGraceRemainingSeconds = 0;
       this.sentWarnings.clear();
       sender.sendMessage(ServerTextUtil.miniMessageComponent("<#FFB300><bold>[Lifecycle]</bold></#FFB300> <#888888>Automatic rotation disarmed.</#888888>"));
    }
@@ -170,6 +177,8 @@ public final class ServerLifecycleService {
       if (!this.countdownActive) {
          this.countdownActive = true;
          this.countdownRemainingSeconds = this.countdownSeconds;
+         this.drainPhaseActive = false;
+         this.drainGraceRemainingSeconds = 0;
          this.plugin.publishNotJoinableHeartbeatNow();
          this.broadcastGlobal(
             "<#FFB300><bold>[Lifecycle]</bold></#FFB300> <#888888>Server restarting in <#FF5555><bold>"
@@ -181,24 +190,72 @@ public final class ServerLifecycleService {
    }
 
    private void sendCountdownTick() {
-      if (this.countdownRemainingSeconds <= 0) {
-         this.executeShutdown();
-      } else {
-         if (this.countdownRemainingSeconds <= 5 || this.countdownRemainingSeconds % 5 == 0) {
-            this.broadcastGlobal(
-               "<#FFB300><bold>[Lifecycle]</bold></#FFB300> <#888888>Restarting in <#FF5555><bold>"
-                  + this.countdownRemainingSeconds
-                  + "</bold></#FF5555>...</#888888>",
-               false
-            );
-         }
-
-         if (this.countdownRemainingSeconds == 5) {
-            this.plugin.gracefulDrainService().beginDrain();
-         }
-
-         this.countdownRemainingSeconds--;
+      if (this.drainPhaseActive) {
+         this.tickDrainPhase();
+         return;
       }
+
+      if (this.countdownRemainingSeconds <= 0) {
+         this.beginDrainPhase();
+         return;
+      }
+
+      if (this.countdownRemainingSeconds <= 5 || this.countdownRemainingSeconds % 5 == 0) {
+         this.broadcastGlobal(
+            "<#FFB300><bold>[Lifecycle]</bold></#FFB300> <#888888>Restarting in <#FF5555><bold>"
+               + this.countdownRemainingSeconds
+               + "</bold></#FF5555>...</#888888>",
+            false
+         );
+      }
+
+      this.countdownRemainingSeconds--;
+   }
+
+   private void beginDrainPhase() {
+      if (this.drainPhaseActive) {
+         return;
+      }
+
+      this.drainPhaseActive = true;
+      this.drainGraceRemainingSeconds = DRAIN_GRACE_SECONDS;
+      this.plugin.gracefulDrainService().beginDrain();
+      this.broadcastGlobal(
+         "<#FFB300><bold>[Lifecycle]</bold></#FFB300> <#888888>Restart countdown finished. Draining players to another server...</#888888>",
+         true
+      );
+      this.tickDrainPhase();
+   }
+
+   private void tickDrainPhase() {
+      int onlinePlayers = this.plugin.getServer().getOnlinePlayers().size();
+      if (onlinePlayers <= 0) {
+         this.executeShutdown();
+         return;
+      }
+
+      if (this.drainGraceRemainingSeconds <= 0) {
+         this.plugin
+            .getLogger()
+            .warning("[Lifecycle] Drain grace expired with " + onlinePlayers + " player(s) still connected; shutting down.");
+         this.executeShutdown();
+         return;
+      }
+
+      if (this.drainGraceRemainingSeconds <= 5 || this.drainGraceRemainingSeconds % 10 == 0) {
+         this.broadcastGlobal(
+            "<#FFB300><bold>[Lifecycle]</bold></#FFB300> <#888888>Waiting for <#FFD700>"
+               + onlinePlayers
+               + "</#FFD700> player"
+               + (onlinePlayers == 1 ? "" : "s")
+               + " to migrate (<#FF5555>"
+               + this.drainGraceRemainingSeconds
+               + "s</#FF5555> remaining)...</#888888>",
+            false
+         );
+      }
+
+      this.drainGraceRemainingSeconds--;
    }
 
    private void executeShutdown() {

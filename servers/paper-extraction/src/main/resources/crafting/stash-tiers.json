@@ -1,0 +1,34 @@
+{
+  "tiers": [
+    {
+      "tier": 1,
+      "name": "Field Pouch",
+      "maxCapacity": 2500,
+      "maxSlots": 9
+    },
+    {
+      "tier": 2,
+      "name": "Supply Bundle",
+      "maxCapacity": 8000,
+      "maxSlots": 18,
+      "upgradeCoins": 1500,
+      "upgradeGold": 0
+    },
+    {
+      "tier": 3,
+      "name": "Quartermaster Crate",
+      "maxCapacity": 20000,
+      "maxSlots": 27,
+      "upgradeCoins": 5000,
+      "upgradeGold": 2
+    },
+    {
+      "tier": 4,
+      "name": "War Stockpile",
+      "maxCapacity": 50000,
+      "maxSlots": 36,
+      "upgradeCoins": 15000,
+      "upgradeGold": 8
+    }
+  ]
+}

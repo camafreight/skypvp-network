@@ -1,9 +1,12 @@
 package network.skypvp.extraction.integration;
 
+import java.util.concurrent.ThreadLocalRandom;
 import network.skypvp.extraction.config.HitscanSettings;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -14,10 +17,21 @@ import org.bukkit.util.Vector;
 
 final class HitscanVisualRenderer {
 
-    private final HitscanSettings settings;
+    /** How far (blocks) off the bullet line a player can be and still hear the round crack past them. */
+    private static final double PASSBY_RADIUS = 3.0;
+    /** Players within this distance of the muzzle are the shooter/point-blank and are skipped. */
+    private static final double PASSBY_SHOOTER_SKIP = 2.5;
+    /** WM pack event; falls back to arrow shoot if the client pack is missing. */
+    private static final String PASSBY_SOUND_KEY = "minecraft:fx.whiz";
+    private static final Sound PASSBY_SOUND_FALLBACK = Sound.ENTITY_ARROW_SHOOT;
+    private static final float PASSBY_VOLUME = 0.85F;
 
-    HitscanVisualRenderer(HitscanSettings settings) {
+    private final HitscanSettings settings;
+    private final HitscanLaserBeamRenderer laserRenderer;
+
+    HitscanVisualRenderer(HitscanSettings settings, HitscanLaserBeamRenderer laserRenderer) {
         this.settings = settings;
+        this.laserRenderer = laserRenderer;
     }
 
     void render(World world, HitscanVisualJob job) {
@@ -26,9 +40,65 @@ final class HitscanVisualRenderer {
         }
         renderTracer(world, job);
         renderImpact(world, job);
+        renderPassby(world, job);
+    }
+
+    /**
+     * Plays a directional "whizz" to any player the round flies close past (but not the shooter). WM's own projectile
+     * whistle never fires because the hitscan path removes the fake projectile before it ticks, so this restores it.
+     */
+    private void renderPassby(World world, HitscanVisualJob job) {
+        Location start = job.start(world);
+        Location end = job.end(world);
+        Vector s = start.toVector();
+        Vector se = end.toVector().subtract(s);
+        double segLenSq = se.lengthSquared();
+        if (segLenSq < 4.0) {
+            return;
+        }
+        Location mid = new Location(
+                world,
+                (start.getX() + end.getX()) * 0.5,
+                (start.getY() + end.getY()) * 0.5,
+                (start.getZ() + end.getZ()) * 0.5
+        );
+        double searchRadius = Math.sqrt(segLenSq) * 0.5 + PASSBY_RADIUS + 1.0;
+        double radiusSq = PASSBY_RADIUS * PASSBY_RADIUS;
+        double shooterSkipSq = PASSBY_SHOOTER_SKIP * PASSBY_SHOOTER_SKIP;
+        for (Player player : world.getNearbyPlayers(mid, searchRadius)) {
+            if (!player.isOnline()) {
+                continue;
+            }
+            Vector p = player.getEyeLocation().toVector();
+            if (p.distanceSquared(s) <= shooterSkipSq) {
+                continue;
+            }
+            double t = p.clone().subtract(s).dot(se) / segLenSq;
+            if (t <= 0.0 || t >= 1.0) {
+                continue;
+            }
+            Vector closest = s.clone().add(se.clone().multiply(t));
+            if (closest.distanceSquared(p) > radiusSq) {
+                continue;
+            }
+            Location soundAt = new Location(world, closest.getX(), closest.getY(), closest.getZ());
+            float pitch = 0.95F + ThreadLocalRandom.current().nextFloat() * 0.25F;
+            try {
+                player.playSound(soundAt, PASSBY_SOUND_KEY, SoundCategory.PLAYERS, PASSBY_VOLUME, pitch);
+            } catch (IllegalArgumentException ignored) {
+                player.playSound(soundAt, PASSBY_SOUND_FALLBACK, SoundCategory.PLAYERS, PASSBY_VOLUME, pitch);
+            }
+        }
     }
 
     private void renderTracer(World world, HitscanVisualJob job) {
+        if (settings.usesLaserTracer()) {
+            if (laserRenderer != null) {
+                laserRenderer.render(world, job);
+            }
+            return;
+        }
+
         double[] xs = job.tracerX();
         if (xs.length == 0) {
             return;

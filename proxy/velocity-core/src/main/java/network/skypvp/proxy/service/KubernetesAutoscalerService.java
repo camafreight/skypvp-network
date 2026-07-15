@@ -59,18 +59,26 @@ public class KubernetesAutoscalerService implements Runnable {
                 double loadRatio = (double) rc.onlinePlayers / rc.softCapacity;
                 String deploymentName = DYNAMIC_ROLES.get(role);
 
+                // Breach saturation: every session unjoinable AND no pod has instance
+                // headroom left. Player-load ratio never catches this (instance caps
+                // saturate long before player caps), so queued players would wait forever.
+                ServerRoutingService.BreachSaturation saturation = "EXTRACTION".equals(role)
+                        ? routingService.breachSaturation()
+                        : null;
+                boolean breachSaturated = saturation != null && saturation.saturated();
+
                 try {
                     KubernetesApiService.KubernetesResourceStatus resStatus = kubeClient.getResourceStatus(deploymentName, KubernetesApiService.ResourceKind.STATEFULSET);
                     int currentReplicas = resStatus.specReplicas();
                     int readyReplicas = resStatus.readyReplicas();
-                    
+
                     if (currentReplicas == 0) continue;
-                    
+
                     // Kubernetes pods are 0-indexed (e.g. skypvp-minigame-2 for 3rd replica)
                     // But Velocity server IDs are 1-indexed (e.g. minigame-3 for 3rd replica)
                     String velocityServerId = role.toLowerCase() + "-" + currentReplicas;
 
-                    if (loadRatio >= SCALE_UP_THRESHOLD) {
+                    if (loadRatio >= SCALE_UP_THRESHOLD || breachSaturated) {
                         if (routingService.isServerDraining(velocityServerId)) {
                             logger.info("[Autoscaler] Load increased for role '{}' ({} / {} = {}). Canceling graceful drain for '{}'.",
                                     role, rc.onlinePlayers, rc.softCapacity, String.format("%.2f", loadRatio), velocityServerId);
@@ -79,11 +87,16 @@ public class KubernetesAutoscalerService implements Runnable {
 
                         if (readyReplicas >= currentReplicas) {
                             int nextReplicas = currentReplicas + 1;
-                            logger.info("[Autoscaler] Role '{}' has high load ({} / {} = {}). Scaling K8s StatefulSet '{}' from {} to {} replicas.",
-                                    role, rc.onlinePlayers, rc.softCapacity, String.format("%.2f", loadRatio), deploymentName, currentReplicas, nextReplicas);
+                            if (breachSaturated) {
+                                logger.info("[Autoscaler] Breach capacity saturated (joinable=0, headroom=0, queued={}). Scaling K8s StatefulSet '{}' from {} to {} replicas.",
+                                        saturation.queuedPlayers(), deploymentName, currentReplicas, nextReplicas);
+                            } else {
+                                logger.info("[Autoscaler] Role '{}' has high load ({} / {} = {}). Scaling K8s StatefulSet '{}' from {} to {} replicas.",
+                                        role, rc.onlinePlayers, rc.softCapacity, String.format("%.2f", loadRatio), deploymentName, currentReplicas, nextReplicas);
+                            }
                             kubeClient.scaleResource(deploymentName, KubernetesApiService.ResourceKind.STATEFULSET, nextReplicas);
                         } else {
-                            logger.debug("[Autoscaler] Role '{}' has high load but Kubernetes is still provisioning or out of resources ({} / {} ready). Waiting.",
+                            logger.debug("[Autoscaler] Role '{}' needs scale-up but Kubernetes is still provisioning or out of resources ({} / {} ready). Waiting.",
                                     role, readyReplicas, currentReplicas);
                         }
                     } else if (loadRatio <= SCALE_DOWN_THRESHOLD) {

@@ -5,25 +5,37 @@ import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.gamemode.api.CoreBehaviorKeys;
 import network.skypvp.paper.library.WorldGroundItemCleanup;
 import network.skypvp.paper.service.BuildProtectionSupport;
-import org.bukkit.GameMode;
-import org.bukkit.entity.Player;
+import org.bukkit.Chunk;
+import org.bukkit.World;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
-import org.bukkit.Chunk;
-import org.bukkit.World;
+import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.WorldLoadEvent;
 
+/**
+ * Hub-world environment locks when {@link CoreBehaviorKeys#BUILD_PROTECTION_ENABLED} is on.
+ *
+ * <p>Block break/place/interact are denied for every player — creative, spectator, and
+ * {@code skypvp.build.bypass} do not override. Breach worlds are owned by extraction guards.
+ */
 public final class WorldEnvironmentListener implements Listener {
 
+    /** @deprecated Bypass is intentionally unused; kept for callers that still reference the constant. */
+    @Deprecated
     public static final String BUILD_BYPASS_PERMISSION = "skypvp.build.bypass";
 
     private final PaperCorePlugin plugin;
@@ -70,7 +82,7 @@ public final class WorldEnvironmentListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (!this.appliesBuildProtection(event.getBlock().getWorld()) || this.canModifyBlocks(event.getPlayer())) {
+        if (!this.appliesBuildProtection(event.getBlock().getWorld())) {
             return;
         }
         event.setCancelled(true);
@@ -78,7 +90,52 @@ public final class WorldEnvironmentListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (!this.appliesBuildProtection(event.getBlock().getWorld()) || this.canModifyBlocks(event.getPlayer())) {
+        if (!this.appliesBuildProtection(event.getBlock().getWorld())) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    /**
+     * Denies doors/chests/buttons/etc. without cancelling the whole interact, so item-use
+     * listeners (hotbar, consumables, guns) still run. Gameplay that needs a block click
+     * (e.g. breach loot chests) must open its own UI after reading the clicked block.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        if (!this.appliesBuildProtection(event.getPlayer().getWorld())) {
+            return;
+        }
+        Action action = event.getAction();
+        if (action == Action.PHYSICAL) {
+            event.setCancelled(true);
+            return;
+        }
+        if ((action == Action.RIGHT_CLICK_BLOCK || action == Action.LEFT_CLICK_BLOCK)
+                && event.getClickedBlock() != null) {
+            event.setUseInteractedBlock(Event.Result.DENY);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBucketEmpty(PlayerBucketEmptyEvent event) {
+        if (!this.appliesBuildProtection(event.getBlock().getWorld())) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBucketFill(PlayerBucketFillEvent event) {
+        if (!this.appliesBuildProtection(event.getBlock().getWorld())) {
+            return;
+        }
+        event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onSignChange(SignChangeEvent event) {
+        if (!this.appliesBuildProtection(event.getBlock().getWorld())) {
             return;
         }
         event.setCancelled(true);
@@ -87,9 +144,6 @@ public final class WorldEnvironmentListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onEntityChangeBlock(EntityChangeBlockEvent event) {
         if (!this.appliesBuildProtection(event.getBlock().getWorld())) {
-            return;
-        }
-        if (event.getEntity() instanceof Player player && this.canModifyBlocks(player)) {
             return;
         }
         if (BuildProtectionSupport.isProtectedLandscapeBlock(event.getBlock())
@@ -151,15 +205,5 @@ public final class WorldEnvironmentListener implements Listener {
 
     private boolean clearGroundItemsOnLoadEnabled() {
         return this.plugin.gameModeBehaviorService().booleanValue(CoreBehaviorKeys.CLEAR_GROUND_ITEMS_ON_LOAD_ENABLED, false);
-    }
-
-    private boolean canModifyBlocks(Player player) {
-        if (player == null) {
-            return true;
-        }
-        GameMode mode = player.getGameMode();
-        return mode == GameMode.CREATIVE
-                || mode == GameMode.SPECTATOR
-                || player.hasPermission(BUILD_BYPASS_PERMISSION);
     }
 }

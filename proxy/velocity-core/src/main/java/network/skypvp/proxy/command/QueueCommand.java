@@ -197,7 +197,9 @@ public final class QueueCommand {
 
                   List<UUID> onlineMembers = this.partyService.onlineMembers(this.proxyServer, state.partyId());
                   if (onlineMembers.size() > 1) {
-                     PartyQueueService.QueueGroupResult grouped = this.partyQueueService.enqueue(queueKey, state.partyId(), state.leaderId(), onlineMembers);
+                     PartyQueueService.QueueGroupResult grouped = "breach".equalsIgnoreCase(queueKey)
+                        ? this.partyQueueService.enqueueBreach(state.partyId(), state.leaderId(), onlineMembers)
+                        : this.partyQueueService.enqueue(queueKey, state.partyId(), state.leaderId(), onlineMembers);
                      if (grouped.alreadyQueued()) {
                         source.sendMessage(ServerTextUtil.component("&eYour party is already queued as a group."));
                         return;
@@ -511,6 +513,7 @@ public final class QueueCommand {
 
    private Set<String> knownQueueKeys() {
       Set<String> keys = new LinkedHashSet<>();
+      keys.add("breach");
       if (this.config.limbo != null && this.config.limbo.initialQueueKey != null && !this.config.limbo.initialQueueKey.isBlank()) {
          keys.add(this.normalizeQueueKey(this.config.limbo.initialQueueKey));
       }

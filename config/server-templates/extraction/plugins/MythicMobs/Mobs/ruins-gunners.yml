@@ -1,0 +1,126 @@
+# Ruins gunners — player-disguised raiders with WeaponMechanics (Infuse armor applied by SkyPvP on spawn).
+# Combat, pathfinding, and targeting are handled entirely by SkyPvP Java state-tree AI.
+RuinsRifleman:
+  Type: HUSK
+  Display: '&7Ruins Rifleman'
+  Health: 84
+  Damage: 0.1
+  Faction: ruins_raider
+  BossBar:
+    Enabled: false
+  Options:
+    AlwaysShowName: false
+    PreventOtherDrops: true
+    PreventRandomEquipment: true
+    PreventSunburn: true
+    Despawn: false
+    Persistent: true
+    MovementSpeed: 0.24
+    FollowRange: 36
+    Silent: true
+  Equipment:
+  - weaponMechanicsWeapon{weapon=AK_47} HAND
+  AIGoalSelectors:
+  - clear
+  AITargetSelectors:
+  - clear
+
+RuinsSMGunner:
+  Type: HUSK
+  Display: '&eRuins SMGunner'
+  Health: 72
+  Damage: 0.1
+  Faction: ruins_raider
+  BossBar:
+    Enabled: false
+  Options:
+    AlwaysShowName: false
+    PreventOtherDrops: true
+    PreventRandomEquipment: true
+    PreventSunburn: true
+    Despawn: false
+    Persistent: true
+    MovementSpeed: 0.24
+    FollowRange: 34
+    Silent: true
+  Equipment:
+  - weaponMechanicsWeapon{weapon=Uzi} HAND
+  AIGoalSelectors:
+  - clear
+  AITargetSelectors:
+  - clear
+
+RuinsBreacher:
+  Type: HUSK
+  Display: '&6Ruins Breacher'
+  Health: 96
+  Damage: 0.1
+  Faction: ruins_raider
+  BossBar:
+    Enabled: false
+  Options:
+    AlwaysShowName: false
+    PreventOtherDrops: true
+    PreventRandomEquipment: true
+    PreventSunburn: true
+    Despawn: false
+    Persistent: true
+    MovementSpeed: 0.24
+    FollowRange: 30
+    Silent: true
+  Equipment:
+  - weaponMechanicsWeapon{weapon=Origin_12} HAND
+  AIGoalSelectors:
+  - clear
+  AITargetSelectors:
+  - clear
+
+RuinsPistolGunner:
+  Type: HUSK
+  Display: '&eRuins Pistol Gunner'
+  Health: 64
+  Damage: 0.1
+  Faction: ruins_raider
+  BossBar:
+    Enabled: false
+  Options:
+    AlwaysShowName: false
+    PreventOtherDrops: true
+    PreventRandomEquipment: true
+    PreventSunburn: true
+    Despawn: false
+    Persistent: true
+    MovementSpeed: 0.24
+    FollowRange: 32
+    Silent: true
+  Equipment:
+  - weaponMechanicsWeapon{weapon=357_Magnum} HAND
+  AIGoalSelectors:
+  - clear
+  AITargetSelectors:
+  - clear
+
+RuinsKnifeRusher:
+  Type: HUSK
+  Display: '&cRuins Knife Rusher'
+  Health: 56
+  Damage: 0.1
+  Faction: ruins_raider
+  BossBar:
+    Enabled: false
+  Options:
+    AlwaysShowName: false
+    PreventOtherDrops: true
+    PreventRandomEquipment: true
+    PreventSunburn: true
+    Despawn: false
+    Persistent: true
+    MovementSpeed: 0.24
+    FollowRange: 40
+    Silent: true
+  Equipment:
+  - weaponMechanicsWeapon{weapon=Combat_Knife} HAND
+  AIGoalSelectors:
+  - clear
+  AITargetSelectors:
+  - clear

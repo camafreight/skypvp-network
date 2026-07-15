@@ -1,0 +1,7 @@
+# Minimal overrides for breach NPC disguises (defaults are merged on startup).
+ContactMojangServers: true
+SaveGameProfiles: true
+UpdateGameProfiles: true
+NotifyUpdate: false
+AutoUpdate: false
+VerboseLogging: false

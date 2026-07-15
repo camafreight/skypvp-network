@@ -1,0 +1,8 @@
+{
+  "typeId": "extraction:module_duelist",
+  "displayName": "Duelist Module",
+  "moduleEffects": [
+    {"label": "15% Attack Speed", "positive": true},
+    {"label": "5% Movement Speed", "positive": false}
+  ]
+}

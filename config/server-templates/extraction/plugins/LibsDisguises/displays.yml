@@ -1,0 +1,8 @@
+# Ruins gunners are NPCs — keep disguised names in tab briefly so Steve/Alex skins resolve reliably.
+ShowNamesAboveDisguises: true
+NameAboveHeadAlwaysVisible: true
+NameAboveDisguise: '%complex%'
+PlayerNames: ARMORSTANDS
+HideDisguisedPlayersFromTab: false
+ShowPlayerDisguisesInTab: true
+NotifyBar: NONE

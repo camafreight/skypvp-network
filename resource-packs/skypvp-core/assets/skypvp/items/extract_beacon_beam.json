@@ -1,0 +1,12 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "skypvp:item/extract_beacon_beam",
+    "tints": [
+      {
+        "type": "minecraft:dye",
+        "default": 16777215
+      }
+    ]
+  }
+}

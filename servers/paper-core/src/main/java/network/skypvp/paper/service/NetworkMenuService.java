@@ -28,6 +28,13 @@ public final class NetworkMenuService {
    private static final int[] PARTY_HEAD_SLOTS = {47, 48, 49, 50, 51};
    private static final int[] PARTY_LEADER_SLOTS = {20, 21, 22, 23, 24};
    private static final int[] PARTY_ROLE_SLOTS = {38, 39, 40, 41, 42};
+   private static final int OPEN_PARTY_BROWSE_MAX = 12;
+   private static final int[] FIND_PARTY_SLOTS = {
+      10, 11, 12, 13, 14, 15, 16,
+      19, 20, 21, 22, 23, 24, 25,
+      28, 29, 30, 31, 32, 33, 34,
+      37, 38, 39, 40, 41, 42, 43
+   };
 
    private final PaperCorePlugin plugin;
    private final GuiManager guiManager;
@@ -147,8 +154,7 @@ public final class NetworkMenuService {
       menu.button(8, GuiButtonLibrary.back("Return to the network menu"), context -> this.openRootMenu(context.viewer()));
       menu.button(
          4,
-         GuiButtonLibrary.infoCard(
-            Material.OAK_SIGN,
+         GuiButtonLibrary.infoQuestion(
             "Party Roles",
             lore -> this.appendPartyRoleGuide(lore)
          ),
@@ -156,13 +162,105 @@ public final class NetworkMenuService {
          }
       );
       menu.button(
-         22,
+         21,
          GuiButtonLibrary.positiveAction(Material.LIME_BANNER, "Create Party", lore -> lore
                .plain("Start a new party with you as leader.")
                .plain("Search for a player to invite right away.")
                .footer("<#888888>", "Or use /party create")),
          this::openPartyCreatePrompt
       );
+      menu.button(
+         23,
+         GuiButtonLibrary.primaryAction(Material.SPYGLASS, "Find a Party", lore -> lore
+               .plain("Browse open parties looking for members.")
+               .plain("Click to see who's recruiting right now.")
+               .footer("<#888888>", "Or use /party find")),
+         context -> this.openFindPartyMenu(context.viewer())
+      );
+      this.guiManager.open(player, menu.build());
+   }
+
+   private void openFindPartyMenu(Player player) {
+      if (this.isSubmenuLocked(player, "PARTY")) {
+         this.notifyLocked(player, "Party");
+         return;
+      }
+      if (this.socialGraphRepository == null) {
+         this.notifySocialUnavailable(player);
+         return;
+      }
+      player.sendActionBar(Component.text("Finding open parties...", NamedTextColor.GRAY));
+      this.socialGraphRepository.listOpenParties(player.getUniqueId(), OPEN_PARTY_BROWSE_MAX).thenAcceptAsync(
+         parties -> this.plugin.platformScheduler().runOnPlayer(player, () -> {
+            if (!player.isOnline()) {
+               return;
+            }
+            player.sendActionBar(Component.empty());
+            this.renderFindPartyMenu(player, parties);
+         }),
+         runnable -> this.plugin.platformScheduler().runAsync(runnable)
+      ).exceptionally(error -> {
+         this.plugin.platformScheduler().runOnPlayer(player, () -> {
+            if (player.isOnline()) {
+               player.sendActionBar(Component.empty());
+               NetworkSoundCue.UI_BUTTON_FAILURE.play(player);
+               player.sendMessage(MiniMessage.miniMessage().deserialize("<red>Could not load open parties right now. Try again.</red>"));
+            }
+         });
+         return null;
+      });
+   }
+
+   private void renderFindPartyMenu(Player player, List<SocialGraphRepository.OpenPartySummary> parties) {
+      GuiMenuBuilder menu = GuiMenuBuilder.create(Component.text("Find a Party"), 54);
+      menu.button(8, GuiButtonLibrary.back("Return to the party menu"), context -> this.openPartyMenu(context.viewer()));
+      menu.button(
+         4,
+         GuiButtonLibrary.positiveAction(Material.NETHER_STAR, "Quick Join", lore -> lore
+               .plain("Instantly join the busiest open party.")
+               .footer("<#888888>", "Or use /party find")),
+         context -> {
+            ProxySocialMessenger.sendPartyCommand(this.plugin, context.viewer(), "find");
+            NetworkSoundCue.UI_BUTTON_CLICK.play(context.viewer());
+            context.close();
+         }
+      );
+
+      if (parties.isEmpty()) {
+         menu.button(
+            22,
+            GuiButtonLibrary.infoExclamation("No Open Parties", lore -> lore
+                  .plain("Nobody is recruiting right now.")
+                  .plain("Create your own party and open it up!")),
+            context -> {
+            }
+         );
+         this.guiManager.open(player, menu.build());
+         return;
+      }
+
+      int shown = Math.min(parties.size(), FIND_PARTY_SLOTS.length);
+      for (int index = 0; index < shown; index++) {
+         SocialGraphRepository.OpenPartySummary summary = parties.get(index);
+         menu.button(
+            FIND_PARTY_SLOTS[index],
+            GuiItems.playerHead(
+               summary.leaderId(),
+               summary.leaderName(),
+               GuiTextLibrary.lore()
+                  .fact("Leader", summary.leaderName())
+                  .fact("Members", summary.memberCount() + "/" + OPEN_PARTY_BROWSE_MAX)
+                  .footerStrong("<green>", "Click to join")
+                  .build()
+            ),
+            context -> {
+               ProxySocialMessenger.sendPartyCommand(this.plugin, context.viewer(), "join " + summary.partyId());
+               NetworkSoundCue.UI_BUTTON_CLICK.play(context.viewer());
+               context.close();
+            }
+         );
+      }
+
       this.guiManager.open(player, menu.build());
    }
 
@@ -203,8 +301,32 @@ public final class NetworkMenuService {
       );
 
       menu.button(
+         1,
+         GuiButtonLibrary.secondaryAction(
+            party.open() ? Material.LIME_DYE : Material.GRAY_DYE,
+            party.open() ? "Party: Open" : "Party: Closed",
+            lore -> lore
+                  .fact("Status", party.open() ? "OPEN" : "CLOSED")
+                  .plain(party.open()
+                        ? "Anyone can use Find a Party (or /party find) to join."
+                        : "Only invited players can join.")
+                  .footer(isLeader ? "<#888888>" : "<red>", isLeader ? "Click to toggle" : "Leader only")
+         ),
+         context -> {
+            if (!isLeader) {
+               NetworkSoundCue.UI_BUTTON_FAILURE.play(context.viewer());
+               context.viewer().sendMessage(MiniMessage.miniMessage().deserialize("<red>Only the party leader can open or close the party.</red>"));
+               return;
+            }
+            ProxySocialMessenger.sendPartyCommand(this.plugin, context.viewer(), party.open() ? "close" : "open");
+            NetworkSoundCue.UI_BUTTON_CLICK.play(context.viewer());
+            this.plugin.platformScheduler().runOnPlayerLater(context.viewer(), () -> this.openPartyMenu(context.viewer()), 10L);
+         }
+      );
+
+      menu.button(
          4,
-         GuiButtonLibrary.infoCard(Material.OAK_SIGN, "Party Roles", lore -> this.appendPartyRoleGuide(lore)),
+         GuiButtonLibrary.infoQuestion("Party Roles", lore -> this.appendPartyRoleGuide(lore)),
          context -> {
          }
       );
@@ -240,10 +362,10 @@ public final class NetworkMenuService {
             GuiItems.playerHead(
                member.playerId(),
                member.username(),
-               GuiTextLibrary.standardLore(List.of(
-                  "<#888888>" + member.role().displayName(),
-                  member.leader() ? "<gold>Party leader" : "<gray>Click dyes above to manage"
-               ))
+               GuiTextLibrary.lore()
+                  .raw("<#888888>" + member.role().displayName())
+                  .raw(member.leader() ? "<gold>Party leader" : "<gray>Click dyes above to manage")
+                  .build()
             ),
             context -> {
             }

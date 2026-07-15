@@ -1,0 +1,155 @@
+# Shared combat skills for Ruins gunner MythicMobs (referenced from ruins-gunners.yml).
+RuinsTacticalRetreat:
+  Skills:
+  - look @Trigger
+  - potion{type=SPEED;duration=50;level=1;force=true} @self
+  - velocity{mode=away;velocity=0.55} @Trigger
+  - delay 2
+  - goto{speed=1.35;sh=1.0} @Forward{f=6;y=0.0}
+
+RuinsSidearmDraw:
+  Conditions:
+  - variableEquals{var=cool.sidearm;value=0} true
+  Skills:
+  - setvariable{var=cool.sidearm;value=1} @self
+  - setvariable{var=cool.ammo;value=6} @self
+  - setvariable{var=cool.mags;value=0} @self
+  - setvariable{var=cool.reloading;value=0} @self
+  - equip{item=weaponMechanicsWeapon{weapon=357_Magnum};slot=HAND} @self
+  - effect:sound{s=entity.item.pickup;volume=0.6;pitch=0.8} @self
+
+RuinsReloadPrimary:
+  Conditions:
+  - variableEquals{var=cool.reloading;value=0} true
+  - variableInRange{var=cool.mags;value=>0} true
+  Skills:
+  - setvariable{var=cool.reloading;value=1} @self
+  - potion{type=SLOW;duration=45;level=2;force=true} @self
+  - effect:sound{s=block.iron_trapdoor.close;volume=0.7;pitch=1.35} @self
+  - delay 45
+  - setvariable{var=cool.ammo;value=30} @self
+  - variablesubtract{var=cool.mags;amount=1} @self
+  - setvariable{var=cool.reloading;value=0} @self
+
+RuinsReloadSmg:
+  Conditions:
+  - variableEquals{var=cool.reloading;value=0} true
+  - variableInRange{var=cool.mags;value=>0} true
+  Skills:
+  - setvariable{var=cool.reloading;value=1} @self
+  - potion{type=SLOW;duration=35;level=2;force=true} @self
+  - effect:sound{s=block.iron_trapdoor.close;volume=0.7;pitch=1.45} @self
+  - delay 35
+  - setvariable{var=cool.ammo;value=32} @self ?variableEquals{var=cool.sidearm;value=0} true
+  - setvariable{var=cool.ammo;value=6} @self ?variableEquals{var=cool.sidearm;value=1} true
+  - variablesubtract{var=cool.mags;amount=1} @self ?variableEquals{var=cool.sidearm;value=0} true
+  - setvariable{var=cool.reloading;value=0} @self
+
+RuinsReloadShotgun:
+  Conditions:
+  - variableEquals{var=cool.reloading;value=0} true
+  - variableInRange{var=cool.mags;value=>0} true
+  Skills:
+  - setvariable{var=cool.reloading;value=1} @self
+  - potion{type=SLOW;duration=50;level=2;force=true} @self
+  - effect:sound{s=block.iron_trapdoor.close;volume=0.7;pitch=0.95} @self
+  - delay 50
+  - setvariable{var=cool.ammo;value=8} @self ?variableEquals{var=cool.sidearm;value=0} true
+  - setvariable{var=cool.ammo;value=6} @self ?variableEquals{var=cool.sidearm;value=1} true
+  - variablesubtract{var=cool.mags;amount=1} @self ?variableEquals{var=cool.sidearm;value=0} true
+  - setvariable{var=cool.reloading;value=0} @self
+
+RuinsReloadSidearm:
+  Conditions:
+  - variableEquals{var=cool.reloading;value=0} true
+  - variableEquals{var=cool.sidearm;value=1} true
+  Skills:
+  - setvariable{var=cool.reloading;value=1} @self
+  - potion{type=SLOW;duration=25;level=1;force=true} @self
+  - effect:sound{s=block.iron_trapdoor.close;volume=0.55;pitch=1.6} @self
+  - delay 25
+  - setvariable{var=cool.ammo;value=6} @self
+  - setvariable{var=cool.reloading;value=0} @self
+
+RuinsRifleCombat:
+  Conditions:
+  - variableEquals{var=cool.reloading;value=0} true
+  Skills:
+  - skill{s=RuinsSidearmDraw} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableInRange{var=cool.mags;value=<1} true ?variableEquals{var=cool.sidearm;value=0} true
+  - skill{s=RuinsReloadPrimary} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableInRange{var=cool.mags;value=>0} true ?variableEquals{var=cool.sidearm;value=0} true
+  - skill{s=RuinsReloadSidearm} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableEquals{var=cool.sidearm;value=1} true
+  - skill{s=RuinsSidearmBurst} @Target ?variableInRange{var=cool.ammo;value=>0} true ?variableEquals{var=cool.sidearm;value=1} true
+  - skill{s=RuinsRifleBurst} @Target ?variableInRange{var=cool.ammo;value=>0} true ?variableEquals{var=cool.sidearm;value=0} true
+
+RuinsSmgCombat:
+  Conditions:
+  - variableEquals{var=cool.reloading;value=0} true
+  Skills:
+  - skill{s=RuinsSidearmDraw} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableInRange{var=cool.mags;value=<1} true ?variableEquals{var=cool.sidearm;value=0} true
+  - skill{s=RuinsReloadSmg} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableInRange{var=cool.mags;value=>0} true ?variableEquals{var=cool.sidearm;value=0} true
+  - skill{s=RuinsReloadSidearm} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableEquals{var=cool.sidearm;value=1} true
+  - skill{s=RuinsSidearmBurst} @Target ?variableInRange{var=cool.ammo;value=>0} true ?variableEquals{var=cool.sidearm;value=1} true
+  - skill{s=RuinsSmgBurst} @Target ?variableInRange{var=cool.ammo;value=>0} true ?variableEquals{var=cool.sidearm;value=0} true
+
+RuinsBreacherCombat:
+  Conditions:
+  - variableEquals{var=cool.reloading;value=0} true
+  Skills:
+  - skill{s=RuinsSidearmDraw} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableInRange{var=cool.mags;value=<1} true ?variableEquals{var=cool.sidearm;value=0} true
+  - skill{s=RuinsReloadShotgun} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableInRange{var=cool.mags;value=>0} true ?variableEquals{var=cool.sidearm;value=0} true
+  - skill{s=RuinsReloadSidearm} @self ?variableInRange{var=cool.ammo;value=<1} true ?variableEquals{var=cool.sidearm;value=1} true
+  - skill{s=RuinsSidearmBurst} @Target ?variableInRange{var=cool.ammo;value=>0} true ?variableEquals{var=cool.sidearm;value=1} true
+  - skill{s=RuinsBreacherBurst} @Target ?variableInRange{var=cool.ammo;value=>0} true ?variableEquals{var=cool.sidearm;value=0} true
+
+RuinsRifleBurst:
+  Skills:
+  - look @Target
+  - weaponMechanicsShoot{weapon=AK_47;spread=6;head=true} @Target
+  - variablesubtract{var=cool.ammo;amount=1} @self
+  - delay 3
+  - look @Target
+  - weaponMechanicsShoot{weapon=AK_47;spread=7;head=true} @Target
+  - variablesubtract{var=cool.ammo;amount=1} @self
+  - delay 3
+  - look @Target
+  - weaponMechanicsShoot{weapon=AK_47;spread=8;head=true} @Target
+  - variablesubtract{var=cool.ammo;amount=1} @self
+
+RuinsSmgBurst:
+  Skills:
+  - look @Target
+  - weaponMechanicsShoot{weapon=Uzi;spread=12;head=true;repeat=6;repeatInterval=2} @Target
+  - variablesubtract{var=cool.ammo;amount=6} @self
+
+RuinsBreacherBurst:
+  Skills:
+  - look @Target
+  - weaponMechanicsShoot{weapon=Origin_12;spread=4;head=true} @Target
+  - variablesubtract{var=cool.ammo;amount=1} @self
+  - delay 5
+  - look @Target
+  - weaponMechanicsShoot{weapon=Origin_12;spread=5;head=true} @Target
+  - variablesubtract{var=cool.ammo;amount=1} @self
+  - delay 5
+  - look @Target
+  - weaponMechanicsShoot{weapon=Origin_12;spread=6;head=true} @Target
+  - variablesubtract{var=cool.ammo;amount=1} @self
+
+RuinsSidearmBurst:
+  Skills:
+  - look @Target
+  - weaponMechanicsShoot{weapon=357_Magnum;spread=8;head=true} @Target
+  - variablesubtract{var=cool.ammo;amount=1} @self
+  - delay 8
+  - look @Target
+  - weaponMechanicsShoot{weapon=357_Magnum;spread=9;head=true} @Target
+  - variablesubtract{var=cool.ammo;amount=1} @self
+
+RuinsSuppressiveFire:
+  Skills:
+  - look @Target
+  - weaponMechanicsShoot{weapon=AK_47;spread=10;head=true} @Target
+  - look @Target
+  - weaponMechanicsShoot{weapon=Uzi;spread=16;head=true} @Target
+  - look @Target
+  - weaponMechanicsShoot{weapon=Origin_12;spread=6;head=true} @Target

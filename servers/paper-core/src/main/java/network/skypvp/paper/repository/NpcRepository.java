@@ -63,7 +63,7 @@ public final class NpcRepository {
    }
 
    public CompletableFuture<List<NpcDefinition>> loadAllAsync(String serverId) {
-      String sql = "SELECT id, display_name, entity_type, world_name, x, y, z, yaw, pitch, action_type, action_data, skin_url, skin_signature, glow, glow_color, face_player, scale, hologram_lines FROM network_npcs WHERE server_id = ?";
+      String sql = "SELECT id, display_name, entity_type, world_name, x, y, z, yaw, pitch, action_type, action_data, skin_url, skin_signature, glow, glow_color, face_player, navigator, scale, hologram_lines, hologram_background, hologram_see_through, hologram_shadowed, hologram_alignment, hologram_view_range, hologram_freeze, hologram_billboard, hologram_scale FROM network_npcs WHERE server_id = ?";
       return this.asyncDbExecutor.supply("npc.loadAll", connection -> {
          List<NpcDefinition> rows = new ArrayList<>();
 
@@ -92,6 +92,7 @@ public final class NpcRepository {
                   def.glow = rs.getBoolean("glow");
                   def.glowColor = rs.getString("glow_color");
                   def.facePlayer = rs.getBoolean("face_player");
+                  def.navigator = rs.getBoolean("navigator");
                   def.scale = rs.getDouble("scale");
                   String linesJson = rs.getString("hologram_lines");
                   if (linesJson != null && !linesJson.isEmpty()) {
@@ -107,6 +108,7 @@ public final class NpcRepository {
                   } else {
                      def.hologramLines = new ArrayList<>();
                   }
+                  this.readHologramDisplayOptions(rs, def);
 
                   rows.add(def);
                }
@@ -118,7 +120,7 @@ public final class NpcRepository {
    }
 
    public void upsert(String serverId, NpcDefinition def, String createdBy) {
-      String sql = "INSERT INTO network_npcs (id, server_id, display_name, entity_type, world_name, x, y, z, yaw, pitch, action_type, action_data, created_by, skin_url, skin_signature, glow, glow_color, face_player, scale, hologram_lines) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id, server_id) DO UPDATE SET display_name=EXCLUDED.display_name, entity_type=EXCLUDED.entity_type, world_name=EXCLUDED.world_name, x=EXCLUDED.x, y=EXCLUDED.y, z=EXCLUDED.z, yaw=EXCLUDED.yaw, pitch=EXCLUDED.pitch, action_type=EXCLUDED.action_type, action_data=EXCLUDED.action_data, skin_url=EXCLUDED.skin_url, skin_signature=EXCLUDED.skin_signature, glow=EXCLUDED.glow, glow_color=EXCLUDED.glow_color, face_player=EXCLUDED.face_player, scale=EXCLUDED.scale, hologram_lines=EXCLUDED.hologram_lines, created_by=EXCLUDED.created_by";
+      String sql = "INSERT INTO network_npcs (id, server_id, display_name, entity_type, world_name, x, y, z, yaw, pitch, action_type, action_data, created_by, skin_url, skin_signature, glow, glow_color, face_player, navigator, scale, hologram_lines, hologram_background, hologram_see_through, hologram_shadowed, hologram_alignment, hologram_view_range, hologram_freeze, hologram_billboard, hologram_scale) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id, server_id) DO UPDATE SET display_name=EXCLUDED.display_name, entity_type=EXCLUDED.entity_type, world_name=EXCLUDED.world_name, x=EXCLUDED.x, y=EXCLUDED.y, z=EXCLUDED.z, yaw=EXCLUDED.yaw, pitch=EXCLUDED.pitch, action_type=EXCLUDED.action_type, action_data=EXCLUDED.action_data, skin_url=EXCLUDED.skin_url, skin_signature=EXCLUDED.skin_signature, glow=EXCLUDED.glow, glow_color=EXCLUDED.glow_color, face_player=EXCLUDED.face_player, navigator=EXCLUDED.navigator, scale=EXCLUDED.scale, hologram_lines=EXCLUDED.hologram_lines, hologram_background=EXCLUDED.hologram_background, hologram_see_through=EXCLUDED.hologram_see_through, hologram_shadowed=EXCLUDED.hologram_shadowed, hologram_alignment=EXCLUDED.hologram_alignment, hologram_view_range=EXCLUDED.hologram_view_range, hologram_freeze=EXCLUDED.hologram_freeze, hologram_billboard=EXCLUDED.hologram_billboard, hologram_scale=EXCLUDED.hologram_scale, created_by=EXCLUDED.created_by";
 
       try {
          this.executeAsync("npc.upsert", connection -> {
@@ -142,8 +144,17 @@ public final class NpcRepository {
                ps.setBoolean(16, def.glow);
                ps.setString(17, def.glowColor);
                ps.setBoolean(18, def.facePlayer);
-               ps.setDouble(19, def.scale);
-               ps.setString(20, def.hologramLines != null ? GSON.toJson(def.hologramLines) : "[]");
+               ps.setBoolean(19, def.navigator);
+               ps.setDouble(20, def.scale);
+               ps.setString(21, def.hologramLines != null ? GSON.toJson(def.hologramLines) : "[]");
+               ps.setBoolean(22, def.hologramBackground);
+               ps.setBoolean(23, def.hologramSeeThrough);
+               ps.setBoolean(24, def.hologramShadowed);
+               ps.setString(25, def.hologramAlignment != null ? def.hologramAlignment : "CENTER");
+               ps.setFloat(26, def.hologramViewRange > 0.0F ? def.hologramViewRange : 1.0F);
+               ps.setBoolean(27, def.hologramFreeze);
+               ps.setString(28, def.hologramBillboard != null ? def.hologramBillboard : "CENTER");
+               ps.setDouble(29, def.hologramScale > 0.0D ? def.hologramScale : 1.0D);
                ps.executeUpdate();
             }
 
@@ -181,7 +192,7 @@ public final class NpcRepository {
    }
 
    public CompletableFuture<List<NpcDefinition>> loadAllScopedAsync() {
-      String sql = "SELECT server_id, id, display_name, entity_type, world_name, x, y, z, yaw, pitch, action_type, action_data, skin_url, skin_signature, glow, glow_color, face_player, scale, hologram_lines FROM network_npcs ORDER BY server_id, id";
+      String sql = "SELECT server_id, id, display_name, entity_type, world_name, x, y, z, yaw, pitch, action_type, action_data, skin_url, skin_signature, glow, glow_color, face_player, navigator, scale, hologram_lines, hologram_background, hologram_see_through, hologram_shadowed, hologram_alignment, hologram_view_range, hologram_freeze, hologram_billboard, hologram_scale FROM network_npcs ORDER BY server_id, id";
       return this.asyncDbExecutor.supply("npc.loadAllScoped", connection -> {
          List<NpcDefinition> rows = new ArrayList<>();
 
@@ -215,7 +226,7 @@ public final class NpcRepository {
    }
 
    public CompletableFuture<List<NpcDefinition>> findAllByIdAsync(String npcId) {
-      String sql = "SELECT server_id, id, display_name, entity_type, world_name, x, y, z, yaw, pitch, action_type, action_data, skin_url, skin_signature, glow, glow_color, face_player, scale, hologram_lines FROM network_npcs WHERE id = ?";
+      String sql = "SELECT server_id, id, display_name, entity_type, world_name, x, y, z, yaw, pitch, action_type, action_data, skin_url, skin_signature, glow, glow_color, face_player, navigator, scale, hologram_lines, hologram_background, hologram_see_through, hologram_shadowed, hologram_alignment, hologram_view_range, hologram_freeze, hologram_billboard, hologram_scale FROM network_npcs WHERE id = ?";
       return this.asyncDbExecutor.supply("npc.findAllById", connection -> {
          List<NpcDefinition> rows = new ArrayList<>();
 
@@ -329,6 +340,7 @@ public final class NpcRepository {
       def.glow = rs.getBoolean("glow");
       def.glowColor = rs.getString("glow_color");
       def.facePlayer = rs.getBoolean("face_player");
+      def.navigator = rs.getBoolean("navigator");
       def.scale = rs.getDouble("scale");
       String linesJson = rs.getString("hologram_lines");
       if (linesJson != null && !linesJson.isEmpty()) {
@@ -344,7 +356,34 @@ public final class NpcRepository {
       } else {
          def.hologramLines = new ArrayList<>();
       }
+      this.readHologramDisplayOptions(rs, def);
 
       return def;
+   }
+
+   private void readHologramDisplayOptions(ResultSet rs, NpcDefinition def) throws Exception {
+      def.hologramBackground = rs.getBoolean("hologram_background");
+      def.hologramSeeThrough = rs.getBoolean("hologram_see_through");
+      def.hologramShadowed = rs.getBoolean("hologram_shadowed");
+      def.hologramAlignment = rs.getString("hologram_alignment");
+      if (def.hologramAlignment == null || def.hologramAlignment.isBlank()) {
+         def.hologramAlignment = "CENTER";
+      }
+      def.hologramViewRange = rs.getFloat("hologram_view_range");
+      if (rs.wasNull() || def.hologramViewRange <= 0.0F) {
+         def.hologramViewRange = 1.0F;
+      }
+      def.hologramFreeze = rs.getBoolean("hologram_freeze");
+      if (rs.wasNull()) {
+         def.hologramFreeze = true;
+      }
+      def.hologramBillboard = rs.getString("hologram_billboard");
+      if (def.hologramBillboard == null || def.hologramBillboard.isBlank()) {
+         def.hologramBillboard = "CENTER";
+      }
+      def.hologramScale = rs.getDouble("hologram_scale");
+      if (rs.wasNull() || def.hologramScale <= 0.0D) {
+         def.hologramScale = 1.0D;
+      }
    }
 }

@@ -1,5 +1,7 @@
 package network.skypvp.shared;
 
+import java.util.List;
+
 public record ServerHeartbeatEvent(
         String serverId,
         NetworkServerRole role,
@@ -14,7 +16,8 @@ public record ServerHeartbeatEvent(
     int openBreachSlots,
     int activeBreaches,
     int queuedPlayers,
-    int maxPlayersPerPod
+    int maxPlayersPerPod,
+    List<BreachInstanceSnapshot> breachInstances
 ) {
     public ServerHeartbeatEvent(
             String serverId,
@@ -24,7 +27,7 @@ public record ServerHeartbeatEvent(
             boolean joinable,
             long occurredAtEpochMillis
     ) {
-    this(serverId, role, onlinePlayers, maxPlayers, joinable, occurredAtEpochMillis, null, 0L, null, 0, 0, 0, 0, 0);
+    this(serverId, role, onlinePlayers, maxPlayers, joinable, occurredAtEpochMillis, null, 0L, null, 0, 0, 0, 0, 0, null);
     }
 
     public ServerHeartbeatEvent(
@@ -40,6 +43,6 @@ public record ServerHeartbeatEvent(
             int advertisedPort
     ) {
         this(serverId, role, onlinePlayers, maxPlayers, joinable, occurredAtEpochMillis, orchestratorSource,
-            orchestrationGeneration, advertisedHost, advertisedPort, 0, 0, 0, 0);
+            orchestrationGeneration, advertisedHost, advertisedPort, 0, 0, 0, 0, null);
     }
 }

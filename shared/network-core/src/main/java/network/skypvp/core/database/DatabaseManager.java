@@ -65,9 +65,14 @@ public final class DatabaseManager implements AutoCloseable {
                this.applyMigration(connection, 3, "migrations/V3__player_social_settings.sql");
                this.applyMigration(connection, 4, "migrations/V4__vault_unlocked_rows.sql");
                this.applyMigration(connection, 5, "migrations/V5__chat_core.sql");
-               this.         applyMigration(connection, 6, "migrations/V6__chat_translation.sql");
-         applyMigration(connection, 7, "migrations/V7__network_nametags.sql");
-         connection.commit();
+               this.applyMigration(connection, 6, "migrations/V6__chat_translation.sql");
+               this.applyMigration(connection, 7, "migrations/V7__network_nametags.sql");
+               this.applyMigration(connection, 8, "migrations/V8__extraction_crafting_progress.sql");
+               this.applyMigration(connection, 9, "migrations/V9__material_stash_tier.sql");
+               this.applyMigration(connection, 10, "migrations/V10__quest_dialogue_progress.sql");
+               this.applyMigration(connection, 11, "migrations/V11__hologram_display_options.sql");
+               this.applyMigration(connection, 12, "migrations/V12__npc_navigator.sql");
+               connection.commit();
             } catch (SQLException e) {
                connection.rollback();
                throw new RuntimeException("Failed to apply database migrations", e);

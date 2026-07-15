@@ -15,6 +15,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import network.skypvp.paper.PaperCorePlugin;
 import network.skypvp.paper.library.HolographicLibrary;
+import network.skypvp.paper.library.InteractionActionTypes;
 import network.skypvp.paper.model.HologramDefinition;
 import network.skypvp.paper.model.WorldPoint;
 import network.skypvp.paper.repository.HologramRepository;
@@ -117,6 +118,27 @@ public final class HologramCommand implements CommandExecutor, TabCompleter {
                   break;
                case "scale":
                   this.handleScale(player, args);
+                  break;
+               case "background":
+                  this.handleDisplayBoolean(player, args, "background", (def, v) -> def.background = v);
+                  break;
+               case "seethrough":
+                  this.handleDisplayBoolean(player, args, "seethrough", (def, v) -> def.seeThrough = v);
+                  break;
+               case "shadowed":
+                  this.handleDisplayBoolean(player, args, "shadowed", (def, v) -> def.shadowed = v);
+                  break;
+               case "freeze":
+                  this.handleDisplayBoolean(player, args, "freeze", (def, v) -> def.freeze = v);
+                  break;
+               case "alignment":
+                  this.handleAlignment(player, args);
+                  break;
+               case "viewrange":
+                  this.handleViewRange(player, args);
+                  break;
+               case "yaw":
+                  this.handleYaw(player, args);
                   break;
                case "center":
                   this.handleCenter(player, args);
@@ -678,7 +700,8 @@ public final class HologramCommand implements CommandExecutor, TabCompleter {
 
    private void handleAction(Player player, String[] args) {
       if (args.length < 3) {
-         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /holo action <id> <NONE|CONNECT|COMMAND|MESSAGE> [data...]<reset>"));
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /holo action <id> <type> [data...]<reset>"));
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Types: NONE, CONNECT, COMMAND, CONSOLE_COMMAND, PROXY_COMMAND, PROXY_CONSOLE_COMMAND, MESSAGE, NEXT_PAGE, PREV_PAGE, GOTO_PAGE, TOGGLE_PAGE<reset>"));
       } else {
          String id = args[1].toLowerCase(Locale.ROOT);
          String actionType = args[2].toUpperCase(Locale.ROOT);
@@ -1134,6 +1157,100 @@ public final class HologramCommand implements CommandExecutor, TabCompleter {
       }
    }
 
+   private void handleDisplayBoolean(Player player, String[] args, String label, java.util.function.BiConsumer<HologramDefinition, Boolean> mutator) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /holo " + label + " <id> <true|false><reset>"));
+         return;
+      }
+      String id = args[1].toLowerCase(Locale.ROOT);
+      boolean value = Boolean.parseBoolean(args[2]);
+      this.mutateHologram(player, id, def -> mutator.accept(def, value), label + "=" + value);
+   }
+
+   private void handleAlignment(Player player, String[] args) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /holo alignment <id> <left|center|right><reset>"));
+         return;
+      }
+      String id = args[1].toLowerCase(Locale.ROOT);
+      String alignment = args[2].toUpperCase(Locale.ROOT);
+      if (!alignment.equals("LEFT") && !alignment.equals("CENTER") && !alignment.equals("RIGHT")) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Alignment must be left, center, or right.<reset>"));
+         return;
+      }
+      this.mutateHologram(player, id, def -> def.textAlignment = alignment, "alignment=" + alignment);
+   }
+
+   private void handleViewRange(Player player, String[] args) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /holo viewrange <id> <0.1-5.0><reset>"));
+         return;
+      }
+      String id = args[1].toLowerCase(Locale.ROOT);
+      float range;
+      try {
+         range = Float.parseFloat(args[2]);
+      } catch (NumberFormatException ex) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Invalid view range.<reset>"));
+         return;
+      }
+      if (range < 0.1F || range > 5.0F) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>View range must be between 0.1 and 5.0.<reset>"));
+         return;
+      }
+      float finalRange = range;
+      this.mutateHologram(player, id, def -> def.viewRange = finalRange, "viewrange=" + finalRange);
+   }
+
+   private void handleYaw(Player player, String[] args) {
+      if (args.length < 3) {
+         player.sendMessage(ServerTextUtil.miniMessageComponent(
+               "<#888888>Usage: /holo yaw <id> <degrees|here> — sets facing; use billboard FIXED for locked facing.<reset>"));
+         return;
+      }
+      String id = args[1].toLowerCase(Locale.ROOT);
+      float yaw;
+      if ("here".equalsIgnoreCase(args[2])) {
+         yaw = player.getLocation().getYaw();
+      } else {
+         try {
+            yaw = Float.parseFloat(args[2]);
+         } catch (NumberFormatException ex) {
+            player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Invalid yaw.<reset>"));
+            return;
+         }
+      }
+      float finalYaw = yaw;
+      this.mutateHologram(player, id, def -> {
+         if (def.anchor == null) {
+            def.anchor = new WorldPoint();
+         }
+         def.anchor.yaw = finalYaw;
+         if (def.billboard == null || "CENTER".equalsIgnoreCase(def.billboard)) {
+            def.billboard = "FIXED";
+         }
+      }, "yaw=" + finalYaw);
+   }
+
+   private void mutateHologram(Player player, String id, java.util.function.Consumer<HologramDefinition> mutator, String summary) {
+      this.plugin.platformScheduler().runAsync(() -> {
+         List<HologramDefinition> existing = this.repository.loadAll(this.serverId);
+         HologramDefinition def = existing.stream().filter(d -> id.equals(d.id)).findFirst().orElse(null);
+         if (def == null) {
+            this.plugin.platformScheduler().runGlobal(() -> player.sendMessage(
+                  ServerTextUtil.miniMessageComponent("<#888888>Hologram '<white>" + id + "<reset><#888888>' not found.<reset>")));
+            return;
+         }
+         mutator.accept(def);
+         this.repository.upsert(this.serverId, def, player.getName());
+         this.plugin.platformScheduler().runGlobal(() -> {
+            this.holographicLibrary.apply(player.getWorld(), List.of(def));
+            player.sendMessage(ServerTextUtil.miniMessageComponent(
+                  "<#FFD700>Hologram <#FFFFFF>" + id + "<reset><#FFD700> updated (" + summary + ")<reset>"));
+         });
+      });
+   }
+
    private void handleCenter(Player player, String[] args) {
       if (args.length < 2) {
          player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Usage: /holo center <id><reset>"));
@@ -1266,7 +1383,7 @@ public final class HologramCommand implements CommandExecutor, TabCompleter {
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo setline <id> <index> <text><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo insertline <id> <index> <text><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo removeline <id> <index><reset>"));
-      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo action <id> <type> [data]<reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo action <id> <type> [data] — COMMAND/CONSOLE/PROXY types support PlaceholderAPI<reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo interactive <id> <true|false><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo hitboxsize <id> <size><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo movehere <id><reset>"));
@@ -1280,6 +1397,11 @@ public final class HologramCommand implements CommandExecutor, TabCompleter {
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo reload<reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo sample<reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo billboard <id> <type><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo background|seethrough|shadowed|freeze <id> <true|false><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo alignment <id> <left|center|right><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo viewrange <id> <0.1-5><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>/holo yaw <id> <degrees|here><reset>"));
+      player.sendMessage(ServerTextUtil.miniMessageComponent("<#888888>Lines: MiniMessage, <smallcaps>...</smallcaps>, <item:MAT>, <block:MAT><reset>"));
       player.sendMessage(ServerTextUtil.miniMessageComponent("<#555555>────────────────────────────<reset>"));
    }
 
@@ -1313,7 +1435,14 @@ public final class HologramCommand implements CommandExecutor, TabCompleter {
             "detach",
             "reload",
             "sample",
-            "billboard"
+            "billboard",
+            "background",
+            "seethrough",
+            "shadowed",
+            "freeze",
+            "alignment",
+            "viewrange",
+            "yaw"
          );
          List<String> matches = new ArrayList<>();
 
@@ -1347,6 +1476,13 @@ public final class HologramCommand implements CommandExecutor, TabCompleter {
                || "attach".equalsIgnoreCase(args[0])
                || "detach".equalsIgnoreCase(args[0])
                || "billboard".equalsIgnoreCase(args[0])
+               || "background".equalsIgnoreCase(args[0])
+               || "seethrough".equalsIgnoreCase(args[0])
+               || "shadowed".equalsIgnoreCase(args[0])
+               || "freeze".equalsIgnoreCase(args[0])
+               || "alignment".equalsIgnoreCase(args[0])
+               || "viewrange".equalsIgnoreCase(args[0])
+               || "yaw".equalsIgnoreCase(args[0])
                || "scope".equalsIgnoreCase(args[0])
          )) {
          String prefix = args[1].toLowerCase(Locale.ROOT);
@@ -1361,7 +1497,7 @@ public final class HologramCommand implements CommandExecutor, TabCompleter {
 
          return matches;
       } else if (args.length == 3 && "action".equalsIgnoreCase(args[0])) {
-         return List.of("NONE", "CONNECT", "COMMAND", "MESSAGE", "NEXT_PAGE", "PREV_PAGE", "GOTO_PAGE", "TOGGLE_PAGE");
+         return InteractionActionTypes.HOLOGRAM_TAB_TYPES;
       } else if (args.length == 3 && "interactive".equalsIgnoreCase(args[0])) {
          return List.of("true", "false");
       } else if (args.length == 3 && "billboard".equalsIgnoreCase(args[0])) {

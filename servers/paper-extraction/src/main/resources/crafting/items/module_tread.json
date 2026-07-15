@@ -1,0 +1,9 @@
+{
+  "typeId": "extraction:module_tread",
+  "displayName": "Tread Module",
+  "moduleEffects": [
+    {"label": "10% Movement Speed", "positive": true},
+    {"label": "8% More Stamina Drain", "positive": false}
+  ],
+  "loreLines": ["<gray>Boots-only module"]
+}

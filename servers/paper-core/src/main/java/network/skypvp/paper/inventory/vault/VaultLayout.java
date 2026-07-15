@@ -7,11 +7,11 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import network.skypvp.paper.gui.GuiButtonLibrary;
 import network.skypvp.paper.gui.GuiItems;
 import network.skypvp.paper.gui.GuiTextLibrary;
+import network.skypvp.paper.gui.GuiTextureItems;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 
 public final class VaultLayout {
 
@@ -91,31 +91,81 @@ public final class VaultLayout {
         return VaultDecorationTags.isDecorative(item);
     }
 
+    // --- Custom GUI skin (font-in-title technique) ---------------------------------------
+    // Codepoints mirror resource-packs/skypvp-core/assets/skypvp/font/{hud,gui}.json.
+    private static final net.kyori.adventure.key.Key HUD_FONT = net.kyori.adventure.key.Key.key("skypvp", "hud");
+    private static final net.kyori.adventure.key.Key GUI_FONT = net.kyori.adventure.key.Key.key("skypvp", "gui");
+    private static final char OFF_N4 = (char) 0xE853;
+    private static final char OFF_N8 = (char) 0xE854;
+    private static final char OFF_N16 = (char) 0xE855;
+    private static final char OVERLAY = (char) 0xE8A0;
+    /** Thumb glyphs at 6 vertical stops; +k selects the stop. */
+    private static final char THUMB_BASE = (char) 0xE8A1;
+    private static final int THUMB_STOPS = 6;
+
     public static Inventory createInventory(VaultHolder holder) {
-        int start = visibleSlotStart(holder.page());
-        int end = visibleSlotEnd(holder.page());
-        Component title = Component.text()
-                .append(Component.text("Vault", NamedTextColor.GOLD))
-                .append(Component.text(" • ", NamedTextColor.DARK_GRAY))
-                .append(Component.text(start + "-" + end, NamedTextColor.YELLOW))
-                .append(Component.text(" / " + MAX_VAULT_SLOTS, NamedTextColor.GRAY))
-                .append(Component.text(" • ", NamedTextColor.DARK_GRAY))
-                .append(Component.text(holder.unlockedRows() + " rows", NamedTextColor.AQUA))
-                .build();
-        Inventory inventory = Bukkit.createInventory(holder, INVENTORY_SIZE, title);
+        Inventory inventory = Bukkit.createInventory(holder, INVENTORY_SIZE, skinnedTitle(holder));
         holder.bindInventory(inventory);
         render(inventory, holder);
         return inventory;
     }
 
+    /**
+     * The title draws the vault skin with pixel-exact cursor math: shift -8 to the GUI
+     * origin, draw the 176x222 overlay (advance 177; scroll rail + button plates baked in),
+     * rewind -20 to the groove column, drop the thumb glyph (advance 11) at the stop
+     * matching the current scroll position. White color = untinted art. Slot range and row
+     * counts live on scroll-track tooltips — no readable title text over the art.
+     *
+     * <p>This is the SERVED title: {@code VaultMenu#title()} must return it — GuiManager
+     * creates the client inventory from the menu title, not from
+     * {@link #createInventory(VaultHolder)}. Scrolls re-open the menu so the client
+     * receives the new thumb position (in-place repaints never resend the title).
+     */
+    static Component skinnedTitle(VaultHolder holder) {
+        int maxRow = Math.max(1, maxScrollRow());
+        int bucket = Math.min(THUMB_STOPS - 1,
+                (int) Math.round(holder.page() * (THUMB_STOPS - 1) / (double) maxRow));
+        return Component.text()
+                .append(Component.text(String.valueOf(OFF_N8)).font(HUD_FONT))
+                .append(Component.text(String.valueOf(OVERLAY)).font(GUI_FONT).color(NamedTextColor.WHITE))
+                .append(Component.text(String.valueOf(OFF_N16) + OFF_N4).font(HUD_FONT))
+                .append(Component.text(String.valueOf((char) (THUMB_BASE + bucket)))
+                        .font(GUI_FONT).color(NamedTextColor.WHITE))
+                .build();
+    }
+
+    public static int contentSlotIndexForVaultIndex(int page, int vaultIndex) {
+        for (int index = 0; index < CONTENT_SLOTS.length; index++) {
+            if (vaultIndexForContentSlot(page, index) == vaultIndex) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
     public static void render(Inventory inventory, VaultHolder holder) {
+        if (holder.inventoryLive()) {
+            syncContentFromInventory(inventory, holder);
+        }
         fillFrame(inventory);
         fillControls(inventory, holder);
         fillContent(inventory, holder);
+        holder.markInventoryLive();
     }
 
     public static void syncContentFromInventory(Inventory inventory, VaultHolder holder) {
-        int page = holder.page();
+        syncContentFromInventory(inventory, holder, holder.page());
+    }
+
+    /**
+     * Sync against an EXPLICIT page: during a scroll re-open the holder's page has already
+     * advanced while the closing inventory still shows the previous page — syncing with
+     * {@code holder.page()} there would copy the old page's items into the new page's
+     * indices (duplication). Callers that outlive a page change must pass the page they
+     * rendered.
+     */
+    public static void syncContentFromInventory(Inventory inventory, VaultHolder holder, int page) {
         for (int index = 0; index < CONTENT_SLOTS.length; index++) {
             int vaultIndex = vaultIndexForContentSlot(page, index);
             if (!holder.isDepositableVaultIndex(vaultIndex)) {
@@ -157,11 +207,10 @@ public final class VaultLayout {
     }
 
     private static void fillFrame(Inventory inventory) {
-        ItemStack filler = fillerPane();
         inventory.setItem(CLOSE_SLOT, GuiButtonLibrary.close("Close vault"));
         inventory.setItem(BACK_SLOT, GuiButtonLibrary.back("Return to previous menu"));
         for (int slot : HEADER_FILLER_SLOTS) {
-            inventory.setItem(slot, filler);
+            inventory.setItem(slot, null);
         }
     }
 
@@ -176,36 +225,34 @@ public final class VaultLayout {
     }
 
     private static ItemStack scrollButton(String label, boolean enabled) {
-        return GuiItems.named(
+        ItemStack item = GuiItems.named(
                 Material.IRON_BARS,
-                GuiTextLibrary.title(enabled ? "#FFD700" : "#888888", label),
+                GuiTextLibrary.title(enabled ? "#40F0FF" : "#888888", label),
                 GuiTextLibrary.lore()
                         .plain(enabled ? "Scroll one row" : "No more rows in this direction")
                         .build()
         );
+        // Custom arrow art rendered inside the overlay's baked button plates.
+        boolean up = label.toLowerCase(java.util.Locale.ROOT).contains("up");
+        item.editMeta(meta -> meta.setItemModel(GuiTextureItems.modelKey(
+                up ? GuiTextureItems.UI_SCROLL_UP : GuiTextureItems.UI_SCROLL_DOWN)));
+        return item;
     }
 
     private static ItemStack scrollTrack(int scrollRow, int maxScrollRow, int segment) {
         int start = visibleSlotStart(scrollRow);
         int end = visibleSlotEnd(scrollRow);
-        return GuiItems.named(
+        ItemStack item = GuiItems.named(
                 Material.IRON_BARS,
                 GuiTextLibrary.title("#888888", "Stash View"),
                 GuiTextLibrary.lore()
                         .fact("Slots", start + "-" + end)
                         .fact("Row", (scrollRow + 1) + " / " + (maxScrollRow + 1))
-                        .plain(segment == 1 ? "Use the chains above and below to scroll" : " ")
+                        .plain(segment == 1 ? "Use the arrows above and below to scroll" : " ")
                         .build()
         );
-    }
-
-    private static ItemStack fillerPane() {
-        ItemStack item = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.empty());
-            item.setItemMeta(meta);
-        }
+        // Invisible item: the overlay's groove + thumb show through; tooltip stays hoverable.
+        item.editMeta(meta -> meta.setItemModel(GuiTextureItems.modelKey(GuiTextureItems.UI_BLANK)));
         return item;
     }
 

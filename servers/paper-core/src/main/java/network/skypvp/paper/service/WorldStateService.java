@@ -10,10 +10,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import network.skypvp.paper.PaperCorePlugin;
+import network.skypvp.paper.event.ServerTrulyReadyEvent;
 import network.skypvp.paper.gamemode.api.CoreBehaviorKeys;
 import network.skypvp.paper.integration.ProxyRouteMessenger;
 import network.skypvp.paper.library.WorldGroundItemCleanup;
@@ -43,16 +46,25 @@ public final class WorldStateService {
    private final AtomicBoolean startupReady = new AtomicBoolean(false);
    private final AtomicBoolean spawnChunksReady = new AtomicBoolean(false);
    /**
-    * Final routing gate. Flips true only after a warmup grace period that begins once the spawn chunks finish
-    * loading. The window right after spawn-chunk load is CPU-heavy (decoration/NPC + hologram reload, ground-item
-    * cleanup, Folia region warmup); routing players in during it leaves them stuck in "Joining World" until they
-    * time out. {@link #isJoinableForRouting()} keys off this flag, not {@link #spawnChunksReady}, so the periodic
-    * heartbeat keeps advertising not-joinable until the server can actually accept joins.
+    * Final routing gate. Flips true only after platform lifecycle, spawn chunks, decorations, all readiness
+    * holds released, and a short settle window. Mode plugins (lobby/extraction) must release their hold
+    * after they finish enabling/warming — otherwise joinable fires while plugins are still bootstrapping.
     */
    private final AtomicBoolean routingReady = new AtomicBoolean(false);
-   private static final long ROUTING_GRACE_TICKS = 20L * 30L;
+   private final AtomicBoolean platformLifecycleReady = new AtomicBoolean(false);
+   private final AtomicBoolean decorationsReady = new AtomicBoolean(false);
+   private final AtomicBoolean settleElapsed = new AtomicBoolean(false);
+   /** Extra settle after decorations finish applying before advertising joinable. */
+   private static final long ROUTING_SETTLE_TICKS = 20L * 5L;
+   /** Folia: wait a few global ticks after decoration loads so region apply tasks can run. */
+   private static final long FOLIA_DECORATION_BARRIER_TICKS = 40L;
+   private final AtomicBoolean routingOpenScheduled = new AtomicBoolean(false);
+   private final Set<String> routingHolds = ConcurrentHashMap.newKeySet();
    private final AtomicReference<String> startupStatus = new AtomicReference<>("PENDING");
    private final AtomicReference<String> pendingSpawnPreset = new AtomicReference<>(null);
+
+   /** Well-known hold key for lobby/extraction mode bootstrap + warm. */
+   public static final String HOLD_MODE_PLUGIN = "mode-plugin";
 
    public WorldStateService(PaperCorePlugin plugin) {
       this.plugin = plugin;
@@ -80,17 +92,64 @@ public final class WorldStateService {
    }
 
    public void markServerLoadComplete() {
+      this.markPlatformLifecycleReady();
+   }
+
+   /**
+    * Called from {@link network.skypvp.paper.platform.ServerLifecycleSupport} after ServerLoadEvent(STARTUP)
+    * and (on Folia) RegionizedServerInitEvent.
+    */
+   public void markPlatformLifecycleReady() {
+      if (!this.platformLifecycleReady.compareAndSet(false, true)) {
+         return;
+      }
       this.serverLoadComplete.set(true);
       String pendingPreset = this.pendingSpawnPreset.getAndSet(null);
-      if (pendingPreset != null) {
-         this.applyPresetSpawn(pendingPreset);
-      }
+      // Pin the managed world's spawn from world-templates meta.json on EVERY boot, not just
+      // after a preset switch — otherwise the world keeps whatever spawn it was generated
+      // with and joins land wherever vanilla decides.
+      this.applyPresetSpawn(pendingPreset != null ? pendingPreset : this.resolvePresetId());
 
       if (!this.requiresPresetGate()) {
-         this.startupStatus.set("READY (persistent role fully loaded)");
+         this.startupStatus.set("READY (platform lifecycle complete)");
       }
 
+      this.plugin.getLogger().info("[WorldState] Platform lifecycle ready — verifying spawn chunks.");
       this.verifySpawnChunksReady();
+   }
+
+   /**
+    * Prevents joinable until {@link #releaseRoutingHold(String)} is called for the same key.
+    * Mode plugins should hold during bootstrap/warm and release when fully settled.
+    */
+   public void holdRouting(String key) {
+      if (key == null || key.isBlank()) {
+         return;
+      }
+      if (this.routingHolds.add(key.trim())) {
+         this.plugin.getLogger().info("[WorldState] Routing hold acquired: '" + key.trim() + "' (active="
+               + this.routingHolds.size() + ").");
+         this.startupStatus.set("WAITING (routing holds: " + String.join(", ", this.routingHolds) + ")");
+      }
+   }
+
+   public void releaseRoutingHold(String key) {
+      if (key == null || key.isBlank()) {
+         return;
+      }
+      if (this.routingHolds.remove(key.trim())) {
+         this.plugin.getLogger().info("[WorldState] Routing hold released: '" + key.trim() + "' (remaining="
+               + this.routingHolds.size() + ").");
+         this.tryOpenRouting();
+      }
+   }
+
+   public boolean hasRoutingHolds() {
+      return !this.routingHolds.isEmpty();
+   }
+
+   public Set<String> routingHolds() {
+      return Set.copyOf(this.routingHolds);
    }
 
    private void verifySpawnChunksReady() {
@@ -109,9 +168,11 @@ public final class WorldStateService {
       }
 
       if (resolved == null) {
-         this.spawnChunksReady.set(true);
-         this.routingReady.set(true);
-         this.plugin.publishJoinableHeartbeatNow();
+         // Do not open routing with no world — retry until a world exists.
+         this.startupStatus.set("WAITING (no world for spawn-chunk gate)");
+         this.plugin.getLogger().warning("[WorldState] No world loaded yet; delaying routing-ready gate.");
+         ServerPlatform scheduler = this.plugin.platformScheduler();
+         scheduler.runGlobalLater(this::verifySpawnChunksReady, 20L);
       } else {
          final org.bukkit.World finalResolved = resolved;
          Location spawn = finalResolved.getSpawnLocation();
@@ -119,8 +180,16 @@ public final class WorldStateService {
          final int chunkZ = spawn.getBlockZ() >> 4;
          ServerPlatform scheduler = this.plugin.platformScheduler();
          AtomicBoolean spawnReadyHandled = new AtomicBoolean(false);
-         scheduler.runGlobalTimer(() -> {
+         // Self-cancelling gate: this retry loop used to keep firing every 10 ticks for the whole
+         // server lifetime after readiness (no-op guard check) because the handle was never kept.
+         java.util.concurrent.atomic.AtomicReference<network.skypvp.paper.platform.PlatformTask> gateTask =
+            new java.util.concurrent.atomic.AtomicReference<>();
+         network.skypvp.paper.platform.PlatformTask scheduled = scheduler.runGlobalTimer(() -> {
             if (spawnReadyHandled.get()) {
+               network.skypvp.paper.platform.PlatformTask self = gateTask.get();
+               if (self != null) {
+                  self.cancel();
+               }
                return;
             }
             if (finalResolved.isChunkLoaded(chunkX, chunkZ)) {
@@ -128,33 +197,86 @@ public final class WorldStateService {
                   return;
                }
                WorldStateService.this.spawnChunksReady.set(true);
-               WorldStateService.this.startupStatus.set("READY (spawn chunks loaded; routing grace)");
+               WorldStateService.this.startupStatus.set("READY (spawn chunks loaded; warming decorations)");
                WorldStateService.this.clearGroundItemsInManagedWorlds("spawn ready");
                WorldStateService.this.plugin
                   .getLogger()
-                  .info("[WorldState] Spawn chunks loaded for '" + finalResolved.getName() + "' — warming up; joinable for routing in 30 seconds.");
-               WorldStateService.this.plugin.reloadDecorationsWhenReady();
-               // Only open the routing gate after the warmup grace so the periodic heartbeat keeps reporting
-               // not-joinable until the post-load CPU spike settles; otherwise players are routed in too early
-               // and hang in "Joining World" until they time out.
-               scheduler.runGlobalLater(() -> {
-                  WorldStateService.this.routingReady.set(true);
-                  WorldStateService.this.startupStatus.set("READY (routing open)");
-                  WorldStateService.this.plugin
-                     .getLogger()
-                     .info("[WorldState] Routing grace elapsed for '" + finalResolved.getName() + "' — server is now joinable for routing.");
-                  WorldStateService.this.plugin.publishJoinableHeartbeatNow();
-               }, ROUTING_GRACE_TICKS);
+                  .info("[WorldState] Spawn chunks loaded for '" + finalResolved.getName()
+                     + "' — reloading decorations before opening routing.");
+               WorldStateService.this.scheduleRoutingOpenAfterWarmup();
+               network.skypvp.paper.platform.PlatformTask self = gateTask.get();
+               if (self != null) {
+                  self.cancel();
+               }
                return;
             }
             scheduler.runAtChunk(finalResolved, chunkX, chunkZ, () -> finalResolved.loadChunk(chunkX, chunkZ, true));
          }, 1L, 10L);
+         gateTask.set(scheduled);
       }
+   }
+
+   private void scheduleRoutingOpenAfterWarmup() {
+      if (!this.routingOpenScheduled.compareAndSet(false, true)) {
+         return;
+      }
+      ServerPlatform scheduler = this.plugin.platformScheduler();
+      this.plugin.reloadDecorationsWhenReady(() -> {
+         Runnable afterBarrier = () -> {
+            WorldStateService.this.decorationsReady.set(true);
+            WorldStateService.this.startupStatus.set("READY (decorations loaded; settling)");
+            WorldStateService.this.plugin
+               .getLogger()
+               .info("[WorldState] Decorations ready — settling " + (ROUTING_SETTLE_TICKS / 20L)
+                  + "s (holds=" + WorldStateService.this.routingHolds + ").");
+            scheduler.runGlobalLater(() -> {
+               WorldStateService.this.settleElapsed.set(true);
+               WorldStateService.this.tryOpenRouting();
+            }, ROUTING_SETTLE_TICKS);
+         };
+         // On Folia, decoration apply is scheduled onto region threads; wait a barrier so those tasks
+         // can run before we start the settle countdown.
+         if (scheduler.isFolia()) {
+            scheduler.runGlobalLater(afterBarrier, FOLIA_DECORATION_BARRIER_TICKS);
+         } else {
+            afterBarrier.run();
+         }
+      });
+   }
+
+   /**
+    * Opens routing only when platform + spawn + decorations + settle are done and no holds remain.
+    */
+   private void tryOpenRouting() {
+      if (this.routingReady.get()) {
+         return;
+      }
+      if (!this.platformLifecycleReady.get()
+            || !this.serverLoadComplete.get()
+            || !this.spawnChunksReady.get()
+            || !this.decorationsReady.get()
+            || !this.settleElapsed.get()) {
+         return;
+      }
+      if (!this.routingHolds.isEmpty()) {
+         this.startupStatus.set("WAITING (routing holds: " + String.join(", ", this.routingHolds) + ")");
+         this.plugin.getLogger().info("[WorldState] Settle complete but still holding joinable for: "
+               + this.routingHolds);
+         return;
+      }
+      if (!this.routingReady.compareAndSet(false, true)) {
+         return;
+      }
+      this.startupStatus.set("READY (routing open)");
+      this.plugin.getLogger().info("[WorldState] Server truly ready — advertising joinable for routing.");
+      Bukkit.getPluginManager().callEvent(new ServerTrulyReadyEvent(this.plugin.serverId(), this.startupStatus.get()));
+      this.plugin.publishJoinableHeartbeatNow();
    }
 
    public boolean isJoinableForRouting() {
       return this.startupReady.get()
          && this.serverLoadComplete.get()
+         && this.platformLifecycleReady.get()
          && this.routingReady.get()
          && !this.resetInProgress.get()
          && !this.startupSyncInProgress.get();
@@ -342,6 +464,7 @@ public final class WorldStateService {
          this.startupReady.set(false);
          this.spawnChunksReady.set(false);
          this.routingReady.set(false);
+         this.routingOpenScheduled.set(false);
          this.startupStatus.set("RESET_IN_PROGRESS");
          this.feedback(sender, "<#FFD700>World reset starting (preset: <white>" + presetId + "<#FFD700>)...<reset>");
          this.plugin.getLogger().info("[WorldState] Reset requested — preset='" + presetId + "' by=" + (sender != null ? sender.getName() : "system"));
@@ -376,9 +499,9 @@ public final class WorldStateService {
          WorldPresetMeta meta = new WorldPresetMeta(
             presetId,
             "Captured from " + this.plugin.serverId(),
-            spawn != null ? spawn.getBlockX() : 0,
-            spawn != null ? spawn.getBlockY() : 64,
-            spawn != null ? spawn.getBlockZ() : 0,
+            spawn != null ? spawn.getX() : 0.0D,
+            spawn != null ? spawn.getY() : 64.0D,
+            spawn != null ? spawn.getZ() : 0.0D,
             spawn != null ? spawn.getYaw() : 0.0F,
             spawn != null ? spawn.getPitch() : 0.0F
          );
@@ -517,6 +640,10 @@ public final class WorldStateService {
          World world = location.getWorld();
          if (world != null) {
             world.setSpawnLocation(location);
+            // Vanilla scatters join/respawn positions within SPAWN_RADIUS of the world
+            // spawn (default 10) — that scatter is why players landed "in random places"
+            // instead of on the meta.json spawn point.
+            world.setGameRule(org.bukkit.GameRule.SPAWN_RADIUS, 0);
          }
       });
    }
